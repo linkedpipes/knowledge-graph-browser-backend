@@ -22,7 +22,10 @@ app.get('/', function (req, res) {
 })
 
 app.get('/test', function (req, res) {
-  console.log("test succesfully called with message: " + req.query.message);
+  res.setHeader('Access-Control-Allow-Origin', '*');
+
+  res.contentType('application/json');
+  res.send(JSON.stringify({m: "server response ;)"}));
 });
 
 app.get('/view-sets', function (req, res)  {
