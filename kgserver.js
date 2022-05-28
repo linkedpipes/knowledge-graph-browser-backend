@@ -21,6 +21,9 @@ app.get('/', function (req, res) {
   
 })
 
+app.get('/test', function (req, res) {
+  console.log("test succesfully called with message: " + req.query.message);
+});
 
 app.get('/view-sets', function (req, res)  {
 
