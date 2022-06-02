@@ -28,6 +28,55 @@ app.get('/test', function (req, res) {
   res.send(JSON.stringify({m: "server response ;)"}));
 });
 
+app.get('/facetsFromConfiguration', function (req, res) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+
+  res.contentType('application/json');
+
+  // Load facets from configuration (run some queries to get labels, min and max values for sliders)
+  // ...
+
+  let facets = {
+    labelType: [{
+      title: 'Born in country label - changed facet',
+      labels: ['Germany', 'Poland', 'France'],
+      // selected labels for each facet
+      selectedLabels: []
+    },
+      {
+        title: 'Label facet 2',
+        labels: ['opt1', 'opt2', 'opt3'],
+        selectedLabels: []
+      }],
+    numericType: [{
+      title: 'Born in country population',
+      minPossible: 10000000,
+      maxPossible: 200000000,
+      selectedRange: [10000000, 200000000]
+    },
+      {
+        title: 'numeric facet 2',
+        minPossible: 10000000,
+        maxPossible: 200000000,
+        selectedRange: [10000000, 200000000]
+      }],
+    numberOfEdgesType: [{
+      title: 'Number of siblings',
+      minPossible: 2,
+      maxPossible: 5,
+      selectedRange: [2, 5]
+    },
+      {
+        title: 'numberOfEdges facet 2',
+        minPossible: 2,
+        maxPossible: 5,
+        selectedRange: [2, 5]
+      }],
+  }
+
+  res.send(JSON.stringify(facets));
+});
+
 app.get('/view-sets', function (req, res)  {
 
   res.setHeader('Access-Control-Allow-Origin', '*');
