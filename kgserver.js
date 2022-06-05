@@ -21,22 +21,25 @@ app.get('/', function (req, res) {
   
 })
 
-app.get('/test', function (req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
+// Get all facets for the given configuration IRI
+app.get('/facets', function (req, res) {
+  const configurationIRI = req.query.configIRI;
+  console.log(configurationIRI);
+  let facetIRIs = {facetIRIs: ["iri1", "iri2", "iri3"]}
 
+
+  res.setHeader('Access-Control-Allow-Origin', '*');
   res.contentType('application/json');
-  res.send(JSON.stringify({m: "server response ;)"}));
+
+  res.send(JSON.stringify(facetIRIs));
 });
 
-app.get('/facetsFromConfiguration', function (req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-
-  res.contentType('application/json');
-
-  // Load facets from configuration (run some queries to get labels, min and max values for sliders)
+// Load facet values
+app.get('/facet-items', function (req, res) {
+  // Load facet values (get labels and min and max values for sliders)
   // ...
 
-  let facets = {
+  let facetsValues = {
     labelType: [{
       title: 'Born in country label - changed facet',
       labels: ['Germany', 'Poland', 'France'],
@@ -74,8 +77,24 @@ app.get('/facetsFromConfiguration', function (req, res) {
       }],
   }
 
-  res.send(JSON.stringify(facets));
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.contentType('application/json');
+
+  res.send(JSON.stringify(facetsValues));
 });
+
+app.get('/filter-by-facets', function (req, res) {
+  // Send a SPARQL query from configuration and filter the given nodes.
+  // Return a list of nodes that passed the filter.
+  filteredResult = {nodesIRIs: ["http://www.wikidata.org/entity/notDarwin"]};
+
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.contentType('application/json');
+
+  res.send(JSON.stringify(filteredResult));
+});
+
+// function filterByFacet
 
 app.get('/view-sets', function (req, res)  {
 
