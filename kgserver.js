@@ -47,54 +47,115 @@ app.get('/facets', function (req, res) {
   });
 });
 
-// Load facet values
 app.get('/facet-items', function (req, res) {
   // Load facet values (get labels and min and max values for sliders)
   // ...
 
-  let facetsValues = {
+  let queryForLabels = `
+    PREFIX wd: <http://www.wikidata.org/entity/>
+    PREFIX wdt: <http://www.wikidata.org/prop/direct/>
+
+    SELECT ?countryLabel
+    WHERE 
+    {
+      VALUES ?person {wd:Q7186 wd:Q150989} 
+      
+      ?person wdt:P19/wdt:P17 ?country.
+      
+      SERVICE wikibase:label {
+            bd:serviceParam wikibase:language "en" .     # or "cs"
+        }  
+    }
+  `;
+
+  let options = {
+    headers: {
+      'User-Agent': 'https://github.com/martinnec/kgbrowser',
+    }
+  };
+
+  options.headers['Accept'] = "application/sparql-results+json";
+  options.url = "https://query.wikidata.org/sparql" + '?query=' + encodeURIComponent(queryForLabels);
+
+    let facetsValues = {
     labelType: [{
-      title: 'Born in country label - changed facet',
-      labels: ['Germany', 'Poland', 'France'],
+      title: '',
+      labels: [],
       // selected labels for each facet
       selectedLabels: []
-    },
-    {
-      title: 'Label facet 2',
-      labels: ['opt1', 'opt2', 'opt3'],
-      selectedLabels: []
-    }],
-    numericType: [{
-      title: 'Born in country population',
-      minPossible: 10000000,
-      maxPossible: 200000000,
-      selectedRange: [10000000, 200000000]
-    },
-    {
-      title: 'numeric facet 2',
-      minPossible: 10000000,
-      maxPossible: 200000000,
-      selectedRange: [10000000, 200000000]
-    }],
-    numberOfEdgesType: [{
-      title: 'Number of siblings',
-      minPossible: 2,
-      maxPossible: 5,
-      selectedRange: [2, 5]
-    },
-    {
-      title: 'numberOfEdges facet 2',
-      minPossible: 2,
-      maxPossible: 5,
-      selectedRange: [2, 5]
-    }],
+    }]
   }
 
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.contentType('application/json');
+  request(options, function (error, response, body) {
+    try {
+      if (error) {
+        res.send("Oops, something happened and couldn't fetch data");
+      } else {
+        endpointResponseObj = JSON.parse(body)
 
-  res.send(JSON.stringify(facetsValues));
+        for (let binding of endpointResponseObj.results.bindings) {
+          facetsValues.labelType[0].labels.push(binding.countryLabel.value)
+        }
+
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.contentType('application/json');
+      
+        res.send(JSON.stringify(facetsValues));
+      }
+    } catch (e) {
+      console.log(e);
+    }
+  });
 });
+
+// Load all facets' values for the given fasets' IRIs
+// app.get('/facet-items', function (req, res) {
+//   // Load facet values (get labels and min and max values for sliders)
+//   // ...
+
+//   let facetsValues = {
+//     labelType: [{
+//       title: 'Born in country label - changed facet',
+//       labels: ['Germany', 'Poland', 'France'],
+//       // selected labels for each facet
+//       selectedLabels: []
+//     },
+//     {
+//       title: 'Label facet 2',
+//       labels: ['opt1', 'opt2', 'opt3'],
+//       selectedLabels: []
+//     }],
+//     numericType: [{
+//       title: 'Born in country population',
+//       minPossible: 10000000,
+//       maxPossible: 200000000,
+//       selectedRange: [10000000, 200000000]
+//     },
+//     {
+//       title: 'numeric facet 2',
+//       minPossible: 10000000,
+//       maxPossible: 200000000,
+//       selectedRange: [10000000, 200000000]
+//     }],
+//     numberOfEdgesType: [{
+//       title: 'Number of siblings',
+//       minPossible: 2,
+//       maxPossible: 5,
+//       selectedRange: [2, 5]
+//     },
+//     {
+//       title: 'numberOfEdges facet 2',
+//       minPossible: 2,
+//       maxPossible: 5,
+//       selectedRange: [2, 5]
+//     }],
+//   }
+
+//   res.setHeader('Access-Control-Allow-Origin', '*');
+//   res.contentType('application/json');
+
+//   res.send(JSON.stringify(facetsValues));
+// });
 
 app.get('/filter-by-facets', function (req, res) {
   // Send a SPARQL query from configuration and filter the given nodes.
@@ -269,6 +330,7 @@ app.get('/expand', function (req, res) {
           options.url = endpoint.value + '?query=' + encodeURIComponent(groundedQuery);
         }
         console.log("expand:\n" + options.url);
+        // ++++++++++++++++++++
         request(options, function (error, response, body) {
           try {
             if (error) {
