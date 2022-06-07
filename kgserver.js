@@ -30,8 +30,9 @@ app.get('/facets', function (req, res) {
   const fetcher = createRdfFetcher(store);
 
   fetcher.load(fetchableURI(configIRI)).then(response => {
-    var configNode = $rdf.sym(utf8ToUnicode(configIRI)); // RDF node
+    var configNode = $rdf.sym(utf8ToUnicode(configIRI));
     var hasFacet = BROWSER('hasFacet');
+
     var facetsNodes = store.each(configNode, hasFacet);
 
     let facetsIRIs = [];
@@ -47,15 +48,17 @@ app.get('/facets', function (req, res) {
   });
 });
 
-app.get('/facet-items', function (req, res) {
+app.get('/facets-items', function (req, res) {
   // Load facet values (get labels and min and max values for sliders)
   // ...
 
   let queryForLabels = `
     PREFIX wd: <http://www.wikidata.org/entity/>
     PREFIX wdt: <http://www.wikidata.org/prop/direct/>
-
-    SELECT ?countryLabel
+  
+    CONSTRUCT {
+      ?country a rdfs:Resource.
+      }
     WHERE 
     {
       VALUES ?person {wd:Q7186 wd:Q150989} 
@@ -77,7 +80,7 @@ app.get('/facet-items', function (req, res) {
   options.headers['Accept'] = "application/sparql-results+json";
   options.url = "https://query.wikidata.org/sparql" + '?query=' + encodeURIComponent(queryForLabels);
 
-    let facetsValues = {
+  let facetsValues = {
     labelType: [{
       title: '',
       labels: [],
@@ -91,15 +94,36 @@ app.get('/facet-items', function (req, res) {
       if (error) {
         res.send("Oops, something happened and couldn't fetch data");
       } else {
-        endpointResponseObj = JSON.parse(body)
+        // endpointResponseObj = JSON.parse(body)
 
-        for (let binding of endpointResponseObj.results.bindings) {
-          facetsValues.labelType[0].labels.push(binding.countryLabel.value)
+        // for (let binding of endpointResponseObj.results.bindings) {
+        //   facetsValues.labelType[0].labels.push(binding.countryLabel.value)
+        // }
+
+        let resultStore = $rdf.graph();
+
+        // change hardcoded IRI
+        parseSPARQLResultsJSON(body, resultStore, "https://linked.opendata.cz/resource/knowledge-graph-browser/facet/born-in-country-labelBLABLABLA");
+
+        let statements = resultStore.match(null, null, null);
+        
+        for (let statement of statements) {
+          console.log(statement.subject.value)
         }
+        
+
+        // Continue here
+        // Check what a dataset accepts and parse its respond to RDF triples
+        // If it is a JSON then use the `parseSPARQLResultsJSON` function otherwise
+        // use the $rdf.parse function. More is on the line 350.
+
+
+
+
 
         res.setHeader('Access-Control-Allow-Origin', '*');
         res.contentType('application/json');
-      
+
         res.send(JSON.stringify(facetsValues));
       }
     } catch (e) {
@@ -107,11 +131,6 @@ app.get('/facet-items', function (req, res) {
     }
   });
 });
-
-// Load all facets' values for the given fasets' IRIs
-// app.get('/facet-items', function (req, res) {
-//   // Load facet values (get labels and min and max values for sliders)
-//   // ...
 
 //   let facetsValues = {
 //     labelType: [{
@@ -151,11 +170,6 @@ app.get('/facet-items', function (req, res) {
 //     }],
 //   }
 
-//   res.setHeader('Access-Control-Allow-Origin', '*');
-//   res.contentType('application/json');
-
-//   res.send(JSON.stringify(facetsValues));
-// });
 
 app.get('/filter-by-facets', function (req, res) {
   // Send a SPARQL query from configuration and filter the given nodes.
@@ -330,7 +344,6 @@ app.get('/expand', function (req, res) {
           options.url = endpoint.value + '?query=' + encodeURIComponent(groundedQuery);
         }
         console.log("expand:\n" + options.url);
-        // ++++++++++++++++++++
         request(options, function (error, response, body) {
           try {
             if (error) {
