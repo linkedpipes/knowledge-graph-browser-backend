@@ -48,37 +48,66 @@ app.get('/facets', function (req, res) {
   });
 });
 
+// Load values for facets (get labels and min and max values for sliders)
 app.get('/facets-items', function (req, res) {
-  // Load facet values (get labels and min and max values for sliders)
-  // ...
+  let configIRI = req.query.configIRI;
 
-  let queryForLabels = `
-    PREFIX wd: <http://www.wikidata.org/entity/>
-    PREFIX wdt: <http://www.wikidata.org/prop/direct/>
-  
-    CONSTRUCT {
-      ?country a rdfs:Resource.
-      }
-    WHERE 
-    {
-      VALUES ?person {wd:Q7186 wd:Q150989} 
-      
-      ?person wdt:P19/wdt:P17 ?country.
-      
-      SERVICE wikibase:label {
-            bd:serviceParam wikibase:language "en" .     # or "cs"
-        }  
-    }
-  `;
+  let facetsIRIsString = req.query.facetsIRIs;
+  let facetsIRIs = facetsIRIsString.split(',');
 
-  let options = {
-    headers: {
-      'User-Agent': 'https://github.com/martinnec/kgbrowser',
-    }
-  };
+  // current nodes obsahuje aj startingNode-y ktoré nie sú zobrazené - pre účel facetov to asi môže byť teraz jedno
+  let currentNodesIRIsString = req.query.currentNodesIRIs;
+  let currentNodesIRIs = currentNodesIRIsString.split(',');
 
-  options.headers['Accept'] = "application/sparql-results+json";
-  options.url = "https://query.wikidata.org/sparql" + '?query=' + encodeURIComponent(queryForLabels);
+  // console.log(configIRI);
+  // console.log(facetsIRIs);
+  // console.log(currentNodesIRIs);
+
+  // Load facet's information
+  let facetIRIDev = "https://linked.opendata.cz/resource/knowledge-graph-browser/facet/born-in-country-label";
+  let store = $rdf.graph();
+
+  const fetcher = createRdfFetcher(store);
+
+  fetcher.load(fetchableURI(facetIRIDev)).then(response => {
+    let facetNode = $rdf.sym(utf8ToUnicode(facetIRIDev));
+
+    let facetQuery = store.any(facetNode, BROWSER('facetQuery')).value;
+
+    let title = store.any(facetNode, DCT("title")).value;
+    let type = store.any(facetNode, BROWSER("facetType")).value;
+    let description = store.any(facetNode, DCT("description")).value;
+    let datasetIri = store.any(facetNode, BROWSER("hasDataset")).value;
+
+    // Load information about dataset
+    fetcher.load(fetchableURI(datasetIri)).then(response => {
+      let datasetNode = $rdf.sym(utf8ToUnicode(datasetIri));
+
+      let endpoint = store.any(datasetNode, VOID("sparqlEndpoint")).value;
+      let accept = store.any(datasetNode, BROWSER("accept")).value;
+
+
+
+    }, err => {
+      console.log("Load failed " + err);
+    });
+  }, err => {
+    console.log("Load failed " + err);
+  });
+
+
+
+
+
+
+  // let options = {
+  //   headers: {
+  //     'User-Agent': 'https://github.com/martinnec/kgbrowser',
+  //   }
+  // };
+
+  // options.headers['Accept'] = "application/sparql-results+json";
+  // options.url = "https://query.wikidata.org/sparql" + '?query=' + encodeURIComponent(query);
 
   let facetsValues = {
     labelType: [{
@@ -89,51 +118,52 @@ app.get('/facets-items', function (req, res) {
     }]
   }
 
-  request(options, function (error, response, body) {
-    try {
-      if (error) {
-        res.send("Oops, something happened and couldn't fetch data");
-      } else {
-        // endpointResponseObj = JSON.parse(body)
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.contentType('application/json');
 
-        // for (let binding of endpointResponseObj.results.bindings) {
-        //   facetsValues.labelType[0].labels.push(binding.countryLabel.value)
-        // }
+  res.send(JSON.stringify(facetsValues));
 
-        let resultStore = $rdf.graph();
+  // request(options, function (error, response, body) {
+  //   try {
+  //     if (error) {
+  //       res.send("Oops, something happened and couldn't fetch data");
+  //     } else {
+  //       let resultStore = $rdf.graph();
 
-        // change hardcoded IRI
-        parseSPARQLResultsJSON(body, resultStore, "https://linked.opendata.cz/resource/knowledge-graph-browser/facet/born-in-country-labelBLABLABLA");
+  //       // change hardcoded IRI
+  //       parseSPARQLResultsJSON(body, resultStore, "https://linked.opendata.cz/resource/knowledge-graph-browser/facet/born-in-country-labelBLABLABLA");
 
-        let statements = resultStore.match(null, null, null);
+  //       let statements = resultStore.match(null, null, null);
         
-        for (let statement of statements) {
-          console.log(statement.subject.value)
-        }
+  //       // I need to query for the returned IRIs to get their labels
+  //       for (let statement of statements) {
+  //         // console.log(statement.subject.value) // this is just an IRI
+  //       }
         
 
-        // Continue here
-        // Check what a dataset accepts and parse its respond to RDF triples
-        // If it is a JSON then use the `parseSPARQLResultsJSON` function otherwise
-        // use the $rdf.parse function. More is on the line 350.
+  //       // Continue here
+  //       // Check what a dataset accepts and parse its respond to RDF triples
+  //       // If it is a JSON then use the `parseSPARQLResultsJSON` function otherwise
+  //       // use the $rdf.parse function. More is on the line 350.
 
 
 
 
 
-        res.setHeader('Access-Control-Allow-Origin', '*');
-        res.contentType('application/json');
+  //       res.setHeader('Access-Control-Allow-Origin', '*');
+  //       res.contentType('application/json');
 
-        res.send(JSON.stringify(facetsValues));
-      }
-    } catch (e) {
-      console.log(e);
-    }
-  });
+  //       res.send(JSON.stringify(facetsValues));
+  //     }
+  //   } catch (e) {
+  //     console.log(e);
+  //   }
+  // });
 });
 
 //   let facetsValues = {
 //     labelType: [{
+        //  facetIRI: "",
 //       title: 'Born in country label - changed facet',
 //       labels: ['Germany', 'Poland', 'France'],
 //       // selected labels for each facet
