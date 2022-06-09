@@ -50,7 +50,7 @@ app.get('/facets', function (req, res) {
 
 // Load values for facets (get labels and min and max values for sliders)
 app.get('/facets-items', function (req, res) {
-  let configIRI = req.query.configIRI;
+  // let configIRI = req.query.configIRI;
 
   let facetsIRIsString = req.query.facetsIRIs;
   let facetsIRIs = facetsIRIsString.split(',');
@@ -63,37 +63,45 @@ app.get('/facets-items', function (req, res) {
   // console.log(facetsIRIs);
   // console.log(currentNodesIRIs);
 
-  // Load facet's information
-  let facetIRIDev = "https://linked.opendata.cz/resource/knowledge-graph-browser/facet/born-in-country-label";
   let store = $rdf.graph();
 
   const fetcher = createRdfFetcher(store);
 
-  fetcher.load(fetchableURI(facetIRIDev)).then(response => {
-    let facetNode = $rdf.sym(utf8ToUnicode(facetIRIDev));
+  // namockovať labely a min/max hodnoty pre nedefinované facety
 
-    let facetQuery = store.any(facetNode, BROWSER('facetQuery')).value;
+  for (let facetIRI of facetsIRIs) {
+    // Load facet's information
+    fetcher.load(fetchableURI(facetIRI)).then(response => {
+      let facetNode = $rdf.sym(utf8ToUnicode(facetIRI));
 
-    let title = store.any(facetNode, DCT("title")).value;
-    let type = store.any(facetNode, BROWSER("facetType")).value;
-    let description = store.any(facetNode, DCT("description")).value;
-    let datasetIri = store.any(facetNode, BROWSER("hasDataset")).value;
+      let facetQuery = store.any(facetNode, BROWSER('facetQuery')).value;
 
-    // Load information about dataset
-    fetcher.load(fetchableURI(datasetIri)).then(response => {
-      let datasetNode = $rdf.sym(utf8ToUnicode(datasetIri));
+      let title = store.any(facetNode, DCT("title")).value;
+      let type = store.any(facetNode, BROWSER("facetType")).value;
+      let description = store.any(facetNode, DCT("description")).value;
+      let datasetIri = store.any(facetNode, BROWSER("hasDataset")).value;
 
-      let endpoint = store.any(datasetNode, VOID("sparqlEndpoint")).value;
-      let accept = store.any(datasetNode, BROWSER("accept")).value;
+      // Load information about dataset
+      fetcher.load(fetchableURI(datasetIri)).then(response => {
+        let datasetNode = $rdf.sym(utf8ToUnicode(datasetIri));
 
+        let endpoint = store.any(datasetNode, VOID("sparqlEndpoint")).value;
+        let accept = store.any(datasetNode, BROWSER("accept")).value;
 
+        // Prepare a query to get labels or min/max values for currently loaded nodes
+        // facetType
+        
+        
 
+      }, err => {
+        console.log("Load failed " + err);
+      });
     }, err => {
       console.log("Load failed " + err);
     });
-  }, err => {
-    console.log("Load failed " + err);
-  });
+  }
+
+
 
 
 
