@@ -49,7 +49,7 @@ app.get('/facets', function (req, res) {
 });
 
 // Load values for facets (get labels and min and max values for sliders)
-app.get('/facets-items', function (req, res) {
+app.get('/facets-items', async function (req, res) {
   // let configIRI = req.query.configIRI;
 
   let facetsIRIsString = req.query.facetsIRIs;
@@ -70,7 +70,7 @@ app.get('/facets-items', function (req, res) {
 
   for (let facetIRI of facetsIRIs) {
     // Load facet's information
-    fetcher.load(fetchableURI(facetIRI)).then(response => {
+    await fetcher.load(fetchableURI(facetIRI)).then(response => {
       let facetNode = $rdf.sym(utf8ToUnicode(facetIRI));
 
       let facetQuery = store.any(facetNode, BROWSER('facetQuery')).value;
@@ -137,9 +137,10 @@ app.get('/facets-items', function (req, res) {
       console.log("Load failed " + err);
     });
   }
+
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.contentType('application/json');
-  console.log(facetsItems);
+  
   res.send(JSON.stringify(facetsItems));
   
 
