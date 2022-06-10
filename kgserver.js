@@ -59,15 +59,14 @@ app.get('/facets-items', function (req, res) {
   let currentNodesIRIsString = req.query.currentNodesIRIs;
   let currentNodesIRIs = currentNodesIRIsString.split(',');
 
-  // console.log(configIRI);
-  // console.log(facetsIRIs);
-  // console.log(currentNodesIRIs);
-
   let store = $rdf.graph();
 
   const fetcher = createRdfFetcher(store);
 
-  // namockovať labely a min/max hodnoty pre nedefinované facety
+  let facetsItems = {
+    labelType: [],
+    numericType: []
+  }
 
   for (let facetIRI of facetsIRIs) {
     // Load facet's information
@@ -75,24 +74,62 @@ app.get('/facets-items', function (req, res) {
       let facetNode = $rdf.sym(utf8ToUnicode(facetIRI));
 
       let facetQuery = store.any(facetNode, BROWSER('facetQuery')).value;
-
       let title = store.any(facetNode, DCT("title")).value;
       let type = store.any(facetNode, BROWSER("facetType")).value;
       let description = store.any(facetNode, DCT("description")).value;
       let datasetIri = store.any(facetNode, BROWSER("hasDataset")).value;
 
-      // Load information about dataset
+      let facet = {
+        iri: facetIRI,
+        title: title,
+        type: type,
+        description: description,
+        query: facetQuery,
+        dataset: {}
+      }
+
+      // Load information about facets' dataset
       fetcher.load(fetchableURI(datasetIri)).then(response => {
         let datasetNode = $rdf.sym(utf8ToUnicode(datasetIri));
 
         let endpoint = store.any(datasetNode, VOID("sparqlEndpoint")).value;
         let accept = store.any(datasetNode, BROWSER("accept")).value;
 
-        // Prepare a query to get labels or min/max values for currently loaded nodes
-        // facetType
-        
-        
+        facet.dataset.endpoint = endpoint;
+        facet.dataset.accept = accept;
 
+        // Prepare and send a query to get labels or min/max values for currently loaded nodes
+        switch (facet.type) {
+          case "label":
+            let labels = getFacetItemsLabelType(facet);
+
+            let labelTypeFacetValues = {
+              facetIRI: facet.iri,
+              title: facet.title,
+              description: facet.description,
+              labels: labels,
+              // selected labels for each facet
+              selectedLabels: []
+            }
+
+            facetsItems.labelType.push(labelTypeFacetValues);
+            break;
+
+          case "numeric":
+            let extrema = getFacetItemsNumericType(facet);
+
+            let numericTypeFacetValues = {
+              facetIRI: facet.iri,
+              title: facet.title,
+              description: facet.description,
+              minPossible: extrema[0],
+              maxPossible: extrema[1],
+              selectedRange: [extrema[0], extrema[1]]
+            }
+
+            facetsItems.numericType.push(numericTypeFacetValues);
+            break; 
+        }        
       }, err => {
         console.log("Load failed " + err);
       });
@@ -100,13 +137,11 @@ app.get('/facets-items', function (req, res) {
       console.log("Load failed " + err);
     });
   }
-
-
-
-
-
-
-
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.contentType('application/json');
+  console.log(facetsItems);
+  res.send(JSON.stringify(facetsItems));
+  
 
   // let options = {
   //   headers: {
@@ -117,19 +152,8 @@ app.get('/facets-items', function (req, res) {
   // options.headers['Accept'] = "application/sparql-results+json";
   // options.url = "https://query.wikidata.org/sparql" + '?query=' + encodeURIComponent(query);
 
-  let facetsValues = {
-    labelType: [{
-      title: '',
-      labels: [],
-      // selected labels for each facet
-      selectedLabels: []
-    }]
-  }
 
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.contentType('application/json');
 
-  res.send(JSON.stringify(facetsValues));
 
   // request(options, function (error, response, body) {
   //   try {
@@ -142,12 +166,7 @@ app.get('/facets-items', function (req, res) {
   //       parseSPARQLResultsJSON(body, resultStore, "https://linked.opendata.cz/resource/knowledge-graph-browser/facet/born-in-country-labelBLABLABLA");
 
   //       let statements = resultStore.match(null, null, null);
-        
-  //       // I need to query for the returned IRIs to get their labels
-  //       for (let statement of statements) {
-  //         // console.log(statement.subject.value) // this is just an IRI
-  //       }
-        
+               
 
   //       // Continue here
   //       // Check what a dataset accepts and parse its respond to RDF triples
@@ -169,45 +188,13 @@ app.get('/facets-items', function (req, res) {
   // });
 });
 
-//   let facetsValues = {
-//     labelType: [{
-        //  facetIRI: "",
-//       title: 'Born in country label - changed facet',
-//       labels: ['Germany', 'Poland', 'France'],
-//       // selected labels for each facet
-//       selectedLabels: []
-//     },
-//     {
-//       title: 'Label facet 2',
-//       labels: ['opt1', 'opt2', 'opt3'],
-//       selectedLabels: []
-//     }],
-//     numericType: [{
-//       title: 'Born in country population',
-//       minPossible: 10000000,
-//       maxPossible: 200000000,
-//       selectedRange: [10000000, 200000000]
-//     },
-//     {
-//       title: 'numeric facet 2',
-//       minPossible: 10000000,
-//       maxPossible: 200000000,
-//       selectedRange: [10000000, 200000000]
-//     }],
-//     numberOfEdgesType: [{
-//       title: 'Number of siblings',
-//       minPossible: 2,
-//       maxPossible: 5,
-//       selectedRange: [2, 5]
-//     },
-//     {
-//       title: 'numberOfEdges facet 2',
-//       minPossible: 2,
-//       maxPossible: 5,
-//       selectedRange: [2, 5]
-//     }],
-//   }
+function getFacetItemsLabelType(facet) {
+  return ["label1", "label2"];
+}
 
+function getFacetItemsNumericType(facet) {
+  return [5, 20];
+}
 
 app.get('/filter-by-facets', function (req, res) {
   // Send a SPARQL query from configuration and filter the given nodes.
