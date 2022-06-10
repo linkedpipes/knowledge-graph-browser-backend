@@ -50,8 +50,6 @@ app.get('/facets', function (req, res) {
 
 // Load values for facets (get labels and min and max values for sliders)
 app.get('/facets-items', async function (req, res) {
-  // let configIRI = req.query.configIRI;
-
   let facetsIRIsString = req.query.facetsIRIs;
   let facetsIRIs = facetsIRIsString.split(',');
 
@@ -70,7 +68,7 @@ app.get('/facets-items', async function (req, res) {
 
   for (let facetIRI of facetsIRIs) {
     // Load facet's information
-    await fetcher.load(fetchableURI(facetIRI)).then(response => {
+    await fetcher.load(fetchableURI(facetIRI)).then(async response => {
       let facetNode = $rdf.sym(utf8ToUnicode(facetIRI));
 
       let facetQuery = store.any(facetNode, BROWSER('facetQuery')).value;
@@ -89,7 +87,7 @@ app.get('/facets-items', async function (req, res) {
       }
 
       // Load information about facets' dataset
-      fetcher.load(fetchableURI(datasetIri)).then(response => {
+      await fetcher.load(fetchableURI(datasetIri)).then(response => {
         let datasetNode = $rdf.sym(utf8ToUnicode(datasetIri));
 
         let endpoint = store.any(datasetNode, VOID("sparqlEndpoint")).value;
@@ -101,7 +99,7 @@ app.get('/facets-items', async function (req, res) {
         // Prepare and send a query to get labels or min/max values for currently loaded nodes
         switch (facet.type) {
           case "label":
-            let labels = getFacetItemsLabelType(facet);
+            let labels = getFacetLabels(facet);
 
             let labelTypeFacetValues = {
               facetIRI: facet.iri,
@@ -116,7 +114,7 @@ app.get('/facets-items', async function (req, res) {
             break;
 
           case "numeric":
-            let extrema = getFacetItemsNumericType(facet);
+            let extrema = getFacetExtrema(facet);
 
             let numericTypeFacetValues = {
               facetIRI: facet.iri,
@@ -140,7 +138,7 @@ app.get('/facets-items', async function (req, res) {
 
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.contentType('application/json');
-  
+
   res.send(JSON.stringify(facetsItems));
   
 
@@ -189,11 +187,11 @@ app.get('/facets-items', async function (req, res) {
   // });
 });
 
-function getFacetItemsLabelType(facet) {
+function getFacetLabels(facet) {
   return ["label1", "label2"];
 }
 
-function getFacetItemsNumericType(facet) {
+function getFacetExtrema(facet) {
   return [5, 20];
 }
 
