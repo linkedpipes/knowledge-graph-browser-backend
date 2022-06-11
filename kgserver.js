@@ -99,7 +99,7 @@ app.get('/facets-items', async function (req, res) {
         // Prepare and send a query to get labels or min/max values for currently loaded nodes
         switch (facet.type) {
           case "label":
-            let labels = getFacetLabels(facet);
+            let labels = getFacetLabels(facet, currentNodesIRIs);
 
             let labelTypeFacetValues = {
               facetIRI: facet.iri,
@@ -114,7 +114,7 @@ app.get('/facets-items', async function (req, res) {
             break;
 
           case "numeric":
-            let extrema = getFacetExtrema(facet);
+            let extrema = getFacetExtrema(facet, currentNodesIRIs);
 
             let numericTypeFacetValues = {
               facetIRI: facet.iri,
@@ -140,7 +140,19 @@ app.get('/facets-items', async function (req, res) {
   res.contentType('application/json');
 
   res.send(JSON.stringify(facetsItems));
-  
+});
+
+function getFacetLabels(facet, currentNodesIRIs) {
+  // Prepare a query
+  nodeIRIsString = "";
+
+  for (let nodeIRI of currentNodesIRIs) {
+    nodeIRIsString += "<" + nodeIRI + ">" + " ";
+  }
+
+  const groundedQuery = facet.query.replace("WHERE {", "WHERE { VALUES ?node {" + nodeIRIsString + "}");
+
+  console.log(groundedQuery);
 
   // let options = {
   //   headers: {
@@ -167,31 +179,43 @@ app.get('/facets-items', async function (req, res) {
   //       let statements = resultStore.match(null, null, null);
                
 
-  //       // Continue here
-  //       // Check what a dataset accepts and parse its respond to RDF triples
-  //       // If it is a JSON then use the `parseSPARQLResultsJSON` function otherwise
-  //       // use the $rdf.parse function. More is on the line 350.
-
-
-
-
-
-  //       res.setHeader('Access-Control-Allow-Origin', '*');
-  //       res.contentType('application/json');
-
-  //       res.send(JSON.stringify(facetsValues));
-  //     }
-  //   } catch (e) {
-  //     console.log(e);
-  //   }
-  // });
-});
-
-function getFacetLabels(facet) {
-  return ["label1", "label2"];
+        // Continue here
+        // Check what a dataset accepts and parse its respond to RDF triples
+        // If it is a JSON then use the `parseSPARQLResultsJSON` function otherwise
+        // use the $rdf.parse function. More is on the line 350.
+    return ["label1", "label2"];
 }
 
-function getFacetExtrema(facet) {
+function getFacetExtrema(facet, currentNodesIRIs) {
+    // let options = {
+  //   headers: {
+  //     'User-Agent': 'https://github.com/martinnec/kgbrowser',
+  //   }
+  // };
+
+  // options.headers['Accept'] = "application/sparql-results+json";
+  // options.url = "https://query.wikidata.org/sparql" + '?query=' + encodeURIComponent(query);
+
+
+
+
+  // request(options, function (error, response, body) {
+  //   try {
+  //     if (error) {
+  //       res.send("Oops, something happened and couldn't fetch data");
+  //     } else {
+  //       let resultStore = $rdf.graph();
+
+  //       // change hardcoded IRI
+  //       parseSPARQLResultsJSON(body, resultStore, "https://linked.opendata.cz/resource/knowledge-graph-browser/facet/born-in-country-labelBLABLABLA");
+
+  //       let statements = resultStore.match(null, null, null);
+               
+
+        // Continue here
+        // Check what a dataset accepts and parse its respond to RDF triples
+        // If it is a JSON then use the `parseSPARQLResultsJSON` function otherwise
+        // use the $rdf.parse function. More is on the line 350.
   return [5, 20];
 }
 
