@@ -87,7 +87,7 @@ app.get('/facets-items', async function (req, res) {
       }
 
       // Load information about facets' dataset
-      await fetcher.load(fetchableURI(datasetIri)).then(response => {
+      await fetcher.load(fetchableURI(datasetIri)).then(async response => {
         let datasetNode = $rdf.sym(utf8ToUnicode(datasetIri));
 
         let endpoint = store.any(datasetNode, VOID("sparqlEndpoint")).value;
@@ -99,7 +99,7 @@ app.get('/facets-items', async function (req, res) {
         // Prepare and send a query to get labels or min/max values for currently loaded nodes
         switch (facet.type) {
           case "label":
-            let labels = getFacetLabels(facet, currentNodesIRIs);
+            let labels = await getFacetLabels(facet, currentNodesIRIs);
 
             let labelTypeFacetValues = {
               facetIRI: facet.iri,
@@ -126,8 +126,8 @@ app.get('/facets-items', async function (req, res) {
             }
 
             facetsItems.numericType.push(numericTypeFacetValues);
-            break; 
-        }        
+            break;
+        }
       }, err => {
         console.log("Load failed " + err);
       });
@@ -152,70 +152,51 @@ function getFacetLabels(facet, currentNodesIRIs) {
 
   const groundedQuery = facet.query.replace("WHERE {", "WHERE { VALUES ?node {" + nodeIRIsString + "}");
 
-  console.log(groundedQuery);
+  // console.log(groundedQuery);
 
-  // let options = {
-  //   headers: {
-  //     'User-Agent': 'https://github.com/martinnec/kgbrowser',
-  //   }
-  // };
+  let options = {
+    headers: {
+      'User-Agent': 'https://github.com/martinnec/kgbrowser',
+    }
+  };
 
-  // options.headers['Accept'] = "application/sparql-results+json";
-  // options.url = "https://query.wikidata.org/sparql" + '?query=' + encodeURIComponent(query);
+  return new Promise(function (resolve, reject) {
+    let labels = [];
 
+    options.headers['Accept'] = "application/sparql-results+json";
+    options.url = "https://query.wikidata.org/sparql" + '?query=' + encodeURIComponent(groundedQuery);
 
+    request(options, function (error, response, body) {
+      try {
+        if (error) {
+          res.send("Oops, something happened and couldn't fetch data");
+        } else {
+          // Continue here
+          // Check what a dataset accepts and parse its respond to RDF triples
+          // If it is JSON then use the `parseSPARQLResultsJSON` function otherwise
+          // use the $rdf.parse function. More is on the line 382.
+          endpointResponseObj = JSON.parse(body)
 
+          let resultStore = $rdf.graph();
 
-  // request(options, function (error, response, body) {
-  //   try {
-  //     if (error) {
-  //       res.send("Oops, something happened and couldn't fetch data");
-  //     } else {
-  //       let resultStore = $rdf.graph();
+          // change hardcoded IRI
+          parseSPARQLResultsJSON(body, resultStore, "https://linked.opendata.cz/resource/knowledge-graph-browser/facet/born-in-country-labelBLABLABLA");
 
-  //       // change hardcoded IRI
-  //       parseSPARQLResultsJSON(body, resultStore, "https://linked.opendata.cz/resource/knowledge-graph-browser/facet/born-in-country-labelBLABLABLA");
+          let statements = resultStore.match(null, null, null);
 
-  //       let statements = resultStore.match(null, null, null);
-               
-
-        // Continue here
-        // Check what a dataset accepts and parse its respond to RDF triples
-        // If it is a JSON then use the `parseSPARQLResultsJSON` function otherwise
-        // use the $rdf.parse function. More is on the line 350.
-    return ["label1", "label2"];
+          for (let statement of statements) {
+            labels.push(statement.object.value)
+          }
+        }
+      } catch (e) {
+        console.log(e);
+      }
+    });
+    resolve(labels);
+  })
 }
 
 function getFacetExtrema(facet, currentNodesIRIs) {
-    // let options = {
-  //   headers: {
-  //     'User-Agent': 'https://github.com/martinnec/kgbrowser',
-  //   }
-  // };
-
-  // options.headers['Accept'] = "application/sparql-results+json";
-  // options.url = "https://query.wikidata.org/sparql" + '?query=' + encodeURIComponent(query);
-
-
-
-
-  // request(options, function (error, response, body) {
-  //   try {
-  //     if (error) {
-  //       res.send("Oops, something happened and couldn't fetch data");
-  //     } else {
-  //       let resultStore = $rdf.graph();
-
-  //       // change hardcoded IRI
-  //       parseSPARQLResultsJSON(body, resultStore, "https://linked.opendata.cz/resource/knowledge-graph-browser/facet/born-in-country-labelBLABLABLA");
-
-  //       let statements = resultStore.match(null, null, null);
-               
-
-        // Continue here
-        // Check what a dataset accepts and parse its respond to RDF triples
-        // If it is a JSON then use the `parseSPARQLResultsJSON` function otherwise
-        // use the $rdf.parse function. More is on the line 350.
   return [5, 20];
 }
 
