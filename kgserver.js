@@ -48,7 +48,7 @@ app.get('/facets', function (req, res) {
   });
 });
 
-// Load values for facets (get labels and min and max values for sliders)
+// Get values for facets (labels and min and max values for sliders)
 app.get('/facets-items', async function (req, res) {
   let facetsIRIsString = req.query.facetsIRIs;
   let facetsIRIs = facetsIRIsString.split(',');
@@ -142,6 +142,14 @@ app.get('/facets-items', async function (req, res) {
   res.send(JSON.stringify(facetsItems));
 });
 
+/**
+ * Fetches and parses labels for the given facet and nodes. 
+ * This function prepares and sends a SPARQL query to a SPARQL 
+ * endpoint and parses its response.
+ * @param {object} facet object representing a facet.
+ * @param {string[]} currentNodesIRIs list of nodes' iris.
+ * @return {Promise<string[]>} list containing found labels.
+ */
 function getFacetLabels(facet, currentNodesIRIs) {
   // Prepare a SPARQL query
   nodeIRIsString = "";
@@ -163,7 +171,7 @@ function getFacetLabels(facet, currentNodesIRIs) {
 
     let accept = facet.dataset.accept;
 
-    // Check if accept is defined
+    // Check if accept is defined for the datacet
     if (accept) {
       options.headers['Accept'] = accept;
     } else {
@@ -191,7 +199,7 @@ function getFacetLabels(facet, currentNodesIRIs) {
 
           for (let statement of statements) {
             let label = statement.object.value
-            
+
             if (!labels.includes(label)) {
               labels.push(label)
             }
