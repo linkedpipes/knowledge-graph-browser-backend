@@ -143,55 +143,65 @@ app.get('/facets-items', async function (req, res) {
 });
 
 function getFacetLabels(facet, currentNodesIRIs) {
-  // Prepare a query
+  // Prepare a SPARQL query
   nodeIRIsString = "";
-
   for (let nodeIRI of currentNodesIRIs) {
     nodeIRIsString += "<" + nodeIRI + ">" + " ";
   }
 
   const groundedQuery = facet.query.replace("WHERE {", "WHERE { VALUES ?node {" + nodeIRIsString + "}");
 
-  // console.log(groundedQuery);
-
-  let options = {
-    headers: {
-      'User-Agent': 'https://github.com/martinnec/kgbrowser',
-    }
-  };
-
   return new Promise(function (resolve, reject) {
     let labels = [];
 
-    options.headers['Accept'] = "application/sparql-results+json";
-    options.url = "https://query.wikidata.org/sparql" + '?query=' + encodeURIComponent(groundedQuery);
+    // Prepare a HTTP request
+    let options = {
+      headers: {
+        'User-Agent': 'https://github.com/martinnec/kgbrowser',
+      }
+    };
 
+    let accept = facet.dataset.accept;
+
+    // Check if accept is defined
+    if (accept) {
+      options.headers['Accept'] = accept;
+    } else {
+      options.headers['Accept'] = "text/turtle";
+    }
+
+    options.url = facet.dataset.endpoint + '?query=' + encodeURIComponent(groundedQuery);
+
+    // Send the request to a SPARQL endpoint
     request(options, function (error, response, body) {
       try {
         if (error) {
           res.send("Oops, something happened and couldn't fetch data");
         } else {
-          // Continue here
-          // Check what a dataset accepts and parse its respond to RDF triples
-          // If it is JSON then use the `parseSPARQLResultsJSON` function otherwise
-          // use the $rdf.parse function. More is on the line 382.
-          endpointResponseObj = JSON.parse(body)
-
+          // Check what the dataset accepts and parse its respond to RDF triples
           let resultStore = $rdf.graph();
 
-          // change hardcoded IRI
-          parseSPARQLResultsJSON(body, resultStore, "https://linked.opendata.cz/resource/knowledge-graph-browser/facet/born-in-country-labelBLABLABLA");
+          if (accept === "application/sparql-results+json") {
+            parseSPARQLResultsJSON(body, resultStore, facet.iri);
+          } else {
+            $rdf.parse(body, resultStore, facet.iri, accept);
+          }
 
           let statements = resultStore.match(null, null, null);
 
           for (let statement of statements) {
-            labels.push(statement.object.value)
+            let label = statement.object.value
+            
+            if (!labels.includes(label)) {
+              labels.push(label)
+            }
           }
         }
       } catch (e) {
         console.log(e);
       }
     });
+
     resolve(labels);
   })
 }
