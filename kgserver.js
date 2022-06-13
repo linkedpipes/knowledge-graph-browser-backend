@@ -21,7 +21,7 @@ app.get('/', function (req, res) {
 
 })
 
-// Get all facets' IRIs for the given configuration IRI
+// Gets all facets' IRIs for the given configuration IRI
 app.get('/facets', function (req, res) {
   const configIRI = req.query.configIRI;
 
@@ -48,7 +48,7 @@ app.get('/facets', function (req, res) {
   });
 });
 
-// Get values for facets (labels and min and max values for sliders)
+// Gets values for facets (labels and min and max values for sliders)
 app.get('/facets-items', async function (req, res) {
   let facetsIRIsString = req.query.facetsIRIs;
   let facetsIRIs = facetsIRIsString.split(',');
@@ -218,18 +218,99 @@ function getFacetExtrema(facet, currentNodesIRIs) {
   return [5, 20];
 }
 
+// Sends a SPARQL query and filter the given nodes.
+// Calls all filtering queries of facets one by one
 app.get('/filter-by-facets', function (req, res) {
-  // Send a SPARQL query from configuration and filter the given nodes.
-  // Return a list of nodes that passed the filter.
-  filteredResult = { nodesIRIs: ["http://www.wikidata.org/entity/notDarwin"] };
+  let facetsParams = JSON.parse(req.query.facetsParams).facetParams;
+
+  let nodes = req.query.currentNodesIRIs.split(",");
+
+  for (let facetParam of facetsParams) {
+    // Load facet's information
+    let store = $rdf.graph();
+
+    const fetcher = createRdfFetcher(store);
+
+    await fetcher.load(fetchableURI(facetParam.facetIRI)).then(response => {
+      let facetNode = $rdf.sym(utf8ToUnicode(facetParam.facetIRI));
+
+      let facetQuery = store.any(facetNode, BROWSER('facetQuery')).value;
+      let type = store.any(facetNode, BROWSER("facetType")).value;
+      let datasetIri = store.any(facetNode, BROWSER("hasDataset")).value;
+
+      let facet = {
+        iri: facetIRI,
+        type: type,
+        query: facetQuery,
+        dataset: {}
+      }
+
+      // Load facet's dataset information
+      await fetcher.load(fetchableURI(datasetIri)).then(response => {
+        let datasetNode = $rdf.sym(utf8ToUnicode(datasetIri));
+
+        let endpoint = store.any(datasetNode, VOID("sparqlEndpoint")).value;
+        let accept = store.any(datasetNode, BROWSER("accept")).value;
+
+        facet.dataset.endpoint = endpoint;
+        facet.dataset.accept = accept;
+
+        // Tu robiť rozlíšenie medzi typmi facetov
+        // facet alebo facetParam?
+        nodes = filterByFacetLabelType(facet, nodes);
+
+      }, err => {
+        console.log("Load failed " + err);
+      });
+    }, err => {
+      console.log("Load failed " + err);
+    });
+  }
+
+  let filteredNodesIRIs = { nodesIRIs: nodes };
 
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.contentType('application/json');
 
-  res.send(JSON.stringify(filteredResult));
+  res.send(JSON.stringify(filteredNodesIRIs));
 });
 
-// function filterByFacet
+// Return a list of nodes that passed the filter.
+// Nodes are specified by their IRI.
+async function filterByFacetLabelType(facet, nodes) {
+  // let facetParam = {
+  //   facetIRI: 'https://linked.opendata.cz/resource/knowledge-graph-browser/facet/born-in-country-label',
+  //   chosenLabels: []
+  // }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  // Einstein
+  return ["http://www.wikidata.org/entity/Q937"]
+}
 
 app.get('/view-sets', function (req, res) {
 
