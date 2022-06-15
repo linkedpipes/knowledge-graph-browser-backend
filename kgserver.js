@@ -107,6 +107,7 @@ app.get('/facets-items', async function (req, res) {
               description: facet.description,
               labels: labels,
               // Currently selected labels (by a user)
+              // for front-end
               selectedLabels: []
             }
 
@@ -114,7 +115,7 @@ app.get('/facets-items', async function (req, res) {
             break;
 
           case "numeric":
-            let extrema = getFacetExtrema(facet, currentNodesIRIs);
+            let extrema = await getFacetExtrema(facet, currentNodesIRIs);
 
             let numericTypeFacetValues = {
               facetIRI: facet.iri,
@@ -122,6 +123,7 @@ app.get('/facets-items', async function (req, res) {
               description: facet.description,
               minPossible: extrema[0],
               maxPossible: extrema[1],
+              // Selected range for front-end
               selectedRange: [extrema[0], extrema[1]]
             }
 
@@ -214,8 +216,84 @@ function getFacetLabels(facet, currentNodesIRIs) {
   })
 }
 
+/**
+ * Fetches and returns min and max values for the given numeric facet and nodes. 
+ * This function prepares and sends a SPARQL query to a SPARQL 
+ * endpoint and parses its response.
+ * @param {object} facet object representing a facet.
+ * @param {string[]} currentNodesIRIs list of nodes' iris.
+ * @return {Promise<number[]>} a list containing min and max values for the 
+ * given numeric facet and nodes.
+ */
 function getFacetExtrema(facet, currentNodesIRIs) {
-  return [5, 20];
+  // Prepare a SPARQL query
+  nodeIRIsString = "";
+  for (let nodeIRI of currentNodesIRIs) {
+    nodeIRIsString += "<" + nodeIRI + ">" + " ";
+  }
+
+  const groundedQuery = facet.query.replace("#INSERTNODES", "VALUES ?node {" + nodeIRIsString + "}");
+
+  console.log(groundedQuery);
+
+  return new Promise(function (resolve, reject) {
+    let extrema = [-1, -1];
+
+    // Prepare a HTTP request
+    let options = {
+      headers: {
+        'User-Agent': 'https://github.com/martinnec/kgbrowser',
+      }
+    };
+
+    let accept = facet.dataset.accept;
+
+    // Check if accept is defined for the datacet
+    if (accept) {
+      options.headers['Accept'] = accept;
+    } else {
+      options.headers['Accept'] = "text/turtle";
+    }
+
+    options.url = facet.dataset.endpoint + '?query=' + encodeURIComponent(groundedQuery);
+
+    // Send the request to a SPARQL endpoint
+    request(options, function (error, response, body) {
+      try {
+        if (error) {
+          res.send("Oops, something happened and couldn't fetch data");
+        } else {
+          // Check what the dataset accepts and parse its respond to RDF triples
+          let resultStore = $rdf.graph();
+
+          if (accept === "application/sparql-results+json") {
+            parseSPARQLResultsJSON(body, resultStore, facet.iri);
+          } else {
+            $rdf.parse(body, resultStore, facet.iri, accept);
+          }
+
+          let statements = resultStore.match(null, null, null);
+
+          let values = [];
+
+          for (let statement of statements) {
+            let value = statement.object.value
+            values.push(value);
+          }
+
+          extrema[0] = Math.min(...values);
+          extrema[1] = Math.max(...values);
+
+          resolve(extrema);
+        }
+      } catch (e) {
+        console.log(e);
+      }
+    });
+  })
+
+
+
 }
 
 // Sends a SPARQL query and filter the given nodes.
