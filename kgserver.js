@@ -106,7 +106,7 @@ app.get('/facets-items', async function (req, res) {
               title: facet.title,
               description: facet.description,
               labels: labels,
-              // selected labels for each facet
+              // Currently selected labels (by a user)
               selectedLabels: []
             }
 
@@ -148,7 +148,7 @@ app.get('/facets-items', async function (req, res) {
  * endpoint and parses its response.
  * @param {object} facet object representing a facet.
  * @param {string[]} currentNodesIRIs list of nodes' iris.
- * @return {Promise<string[]>} list containing found labels.
+ * @return {Promise<string[]>} a list containing found labels.
  */
 function getFacetLabels(facet, currentNodesIRIs) {
   // Prepare a SPARQL query
@@ -204,13 +204,13 @@ function getFacetLabels(facet, currentNodesIRIs) {
               labels.push(label)
             }
           }
+
+          resolve(labels);
         }
       } catch (e) {
         console.log(e);
       }
     });
-
-    resolve(labels);
   })
 }
 
@@ -220,18 +220,17 @@ function getFacetExtrema(facet, currentNodesIRIs) {
 
 // Sends a SPARQL query and filter the given nodes.
 // Calls all filtering queries of facets one by one
-app.get('/filter-by-facets', function (req, res) {
+app.get('/filter-by-facets', async function (req, res) {
   let facetsParams = JSON.parse(req.query.facetsParams).facetParams;
 
   let nodes = req.query.currentNodesIRIs.split(",");
 
+  let store = $rdf.graph();
+  const fetcher = createRdfFetcher(store);
+
   for (let facetParam of facetsParams) {
     // Load facet's information
-    let store = $rdf.graph();
-
-    const fetcher = createRdfFetcher(store);
-
-    await fetcher.load(fetchableURI(facetParam.facetIRI)).then(response => {
+    await fetcher.load(fetchableURI(facetParam.facetIRI)).then(async response => {
       let facetNode = $rdf.sym(utf8ToUnicode(facetParam.facetIRI));
 
       let facetQuery = store.any(facetNode, BROWSER('facetQuery')).value;
@@ -239,14 +238,15 @@ app.get('/filter-by-facets', function (req, res) {
       let datasetIri = store.any(facetNode, BROWSER("hasDataset")).value;
 
       let facet = {
-        iri: facetIRI,
+        iri: facetParam.facetIRI,
         type: type,
+        chosenParams: facetParam.chosenParams,
         query: facetQuery,
         dataset: {}
       }
 
       // Load facet's dataset information
-      await fetcher.load(fetchableURI(datasetIri)).then(response => {
+      await fetcher.load(fetchableURI(datasetIri)).then(async response => {
         let datasetNode = $rdf.sym(utf8ToUnicode(datasetIri));
 
         let endpoint = store.any(datasetNode, VOID("sparqlEndpoint")).value;
@@ -256,9 +256,7 @@ app.get('/filter-by-facets', function (req, res) {
         facet.dataset.accept = accept;
 
         // Tu robiť rozlíšenie medzi typmi facetov
-        // facet alebo facetParam?
-        nodes = filterByFacetLabelType(facet, nodes);
-
+        nodes = await filterByFacetLabelType(facet, nodes);
       }, err => {
         console.log("Load failed " + err);
       });
@@ -275,36 +273,101 @@ app.get('/filter-by-facets', function (req, res) {
   res.send(JSON.stringify(filteredNodesIRIs));
 });
 
-// Return a list of nodes that passed the filter.
+/**
+ * Returns a list of nodes that passed the facet's filtering query. 
+ * Nodes are specified by their IRI.
+ * @param {object} facet object representing a facet.
+ * @param {string[]} currentNodesIRIs list of nodes' iris.
+ * @return {Promise<string[]>} a list containing filtered nodes.
+ */
+function filterByFacetLabelType(facet, currentNodesIRIs) {
+  // Prepare a SPARQL query
+  let subjectIRIsString = "";
+  for (let subjectNodeIRI of currentNodesIRIs) {
+    subjectIRIsString += "<" + subjectNodeIRI + ">" + " ";
+  }
+
+  let subjectValues = "VALUES ?node {" + subjectIRIsString + "}";
+
+  let objectIRIsString = "";
+  for (let objectNodeIRI of facet.chosenParams) {
+    objectIRIsString += "\"" + objectNodeIRI + "\"@en" + " ";
+  }
+
+  let objectValues = "VALUES ?targetNode {" + objectIRIsString + "}";
+
+  const groundedQuery = facet.query.replace("WHERE {", "WHERE { " + subjectValues + " " + objectValues);
+
+  return new Promise(function (resolve, reject) {
+    let filteredNodesIRIs = [];
+
+    // Prepare a HTTP request
+    let options = {
+      headers: {
+        'User-Agent': 'https://github.com/martinnec/kgbrowser',
+      }
+    };
+
+    let accept = facet.dataset.accept;
+
+    // Check if accept is defined for the datacet
+    if (accept) {
+      options.headers['Accept'] = accept;
+    } else {
+      options.headers['Accept'] = "text/turtle";
+    }
+
+    options.url = facet.dataset.endpoint + '?query=' + encodeURIComponent(groundedQuery);
+
+    // Send the request to a SPARQL endpoint
+    request(options, function (error, response, body) {
+      try {
+        if (error) {
+          res.send("Oops, something happened and couldn't fetch data");
+        } else {
+          // Check what the dataset accepts and parse its respond to RDF triples
+          let resultStore = $rdf.graph();
+
+          if (accept === "application/sparql-results+json") {
+            parseSPARQLResultsJSON(body, resultStore, facet.iri);
+          } else {
+            $rdf.parse(body, resultStore, facet.iri, accept);
+          }
+
+          let statements = resultStore.match(null, null, null);
+
+          for (let statement of statements) {
+            let filteredNodeIRI = statement.subject.value;
+            filteredNodesIRIs.push(filteredNodeIRI);
+          }
+
+          resolve(filteredNodesIRIs);
+        }
+      } catch (e) {
+        console.log(e);
+      }
+    });
+  })
+}
+
+// Return a list of nodes that passed the facet's filter.
 // Nodes are specified by their IRI.
-async function filterByFacetLabelType(facet, nodes) {
-  // let facetParam = {
-  //   facetIRI: 'https://linked.opendata.cz/resource/knowledge-graph-browser/facet/born-in-country-label',
-  //   chosenLabels: []
-  // }
+async function filterByFacetNumericType(facet, currentNodesIRIs) {
+  console.log(facet.chosenParams);
+  let min = facet.chosenParams[0];
+  let max = facet.chosenParams[1];
 
 
+  // Einstein
+  return ["http://www.wikidata.org/entity/Q937"]
+}
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+// Return a list of nodes that passed the facet's filter.
+// Nodes are specified by their IRI.
+async function filterByFacetNumOfEdgesType(facet, currentNodesIRIs) {
+  console.log(facet.chosenParams);
+  let min = facet.chosenParams[0];
+  let max = facet.chosenParams[1];
 
 
 
@@ -1218,7 +1281,6 @@ function getResourceDescription(store, resource) {
 }
 
 function parseSPARQLResultsJSON(body, store, source) {
-
   let subject, predicate, object;
   let bnodes = {};
   let why = $rdf.sym(source);
