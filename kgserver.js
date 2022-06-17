@@ -21,15 +21,16 @@ app.get('/', function (req, res) {
 
 })
 
-// Gets all facets' IRIs for the given configuration IRI
-app.get('/facets', function (req, res) {
+// Gets values for facets - prepares and sends a SPARQL query to a SPARQL 
+// endpoint and parses its response
+app.get('/facets-items', function (req, res) {
   const configIRI = req.query.configIRI;
 
   let store = $rdf.graph();
 
   const fetcher = createRdfFetcher(store);
 
-  fetcher.load(fetchableURI(configIRI)).then(response => {
+  fetcher.load(fetchableURI(configIRI)).then(async response => {
     var configNode = $rdf.sym(utf8ToUnicode(configIRI));
     var hasFacet = BROWSER('hasFacet');
 
@@ -41,417 +42,117 @@ app.get('/facets', function (req, res) {
       facetsIRIs.push(facetsNodes[i].value)
     }
 
+    let currentNodesIRIsString = req.query.currentNodesIRIs;
+    let currentNodesIRIs = currentNodesIRIsString.split(',');
+
+    let facetsItems = [];
+
+    for (let facetIRI of facetsIRIs) {
+      // Load facet's information
+      await fetcher.load(fetchableURI(facetIRI)).then(async response => {
+        let facetNode = $rdf.sym(utf8ToUnicode(facetIRI));
+
+        let query = store.any(facetNode, BROWSER('facetQuery')).value;
+        let title = store.any(facetNode, DCT("title")).value;
+        let type = store.any(facetNode, BROWSER("facetType")).value;
+        let description = store.any(facetNode, DCT("description")).value;
+        let datasetIri = store.any(facetNode, BROWSER("hasDataset")).value;
+
+        // Load information about facet's dataset
+        await fetcher.load(fetchableURI(datasetIri)).then(async response => {
+          let datasetNode = $rdf.sym(utf8ToUnicode(datasetIri));
+
+          let endpoint = store.any(datasetNode, VOID("sparqlEndpoint")).value;
+          let accept = store.any(datasetNode, BROWSER("accept")).value;
+
+          // Prepare a SPARQL query
+          nodeIRIsString = "";
+          for (let nodeIRI of currentNodesIRIs) {
+            nodeIRIsString += "<" + nodeIRI + ">" + " ";
+          }
+
+          const groundedQuery = query.replace("#INSERTNODES", "VALUES ?node {" + nodeIRIsString + "}");
+
+          // Prepare a HTTP request
+          let requestPromise = new Promise((resolve, reject) => {
+            let options = {
+              headers: {
+                'User-Agent': 'https://github.com/martinnec/kgbrowser',
+              }
+            };
+
+            // Check if accept is defined for the datacet
+            if (accept) {
+              options.headers['Accept'] = accept;
+            } else {
+              options.headers['Accept'] = "text/turtle";
+            }
+
+            options.url = endpoint + '?query=' + encodeURIComponent(groundedQuery);
+
+            // Send the request to a SPARQL endpoint
+            request(options, function (error, response, body) {
+              try {
+                if (error) {
+                  res.send("Oops, something happened and couldn't fetch data");
+                } else {
+                  // Check what the dataset accepts and parse its respond to RDF triples
+                  let resultStore = $rdf.graph();
+
+                  if (accept === "application/sparql-results+json") {
+                    parseSPARQLResultsJSON(body, resultStore, facetIRI);
+                  } else {
+                    $rdf.parse(body, resultStore, facet.iri, accept);
+                  }
+
+                  let statements = resultStore.match(null, null, null);
+
+                  let items = [];
+
+                  for (let statement of statements) {
+                    let subject = statement.subject.value
+                    let object = statement.object.value
+
+                    items.push({
+                      nodeIRI: subject,
+                      itemValue: object
+                    })
+                  }
+
+                  const facet = {
+                    iri: facetIRI,
+                    title: title,
+                    type: type,
+                    description: description,
+                    items: items
+                  }
+
+                  resolve(facet);
+                }
+              } catch (e) {
+                console.log(e);
+              }
+            });
+          })
+
+          let facet = await requestPromise;
+
+          facetsItems.push(facet);
+        }, err => {
+          console.log("Load failed " + err);
+        });
+      }, err => {
+        console.log("Load failed " + err);
+      });
+    }
+
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.contentType('application/json');
 
-    res.send(JSON.stringify({ facetsIRIs: facetsIRIs }));
+    res.send(JSON.stringify({ facetsItems: facetsItems }));
+
   });
 });
-
-// Gets values for facets (labels and min and max values for sliders)
-app.get('/facets-items', async function (req, res) {
-  let facetsIRIsString = req.query.facetsIRIs;
-  let facetsIRIs = facetsIRIsString.split(',');
-
-  // current nodes obsahuje aj startingNode-y ktoré nie sú zobrazené - pre účel facetov to asi môže byť teraz jedno
-  let currentNodesIRIsString = req.query.currentNodesIRIs;
-  let currentNodesIRIs = currentNodesIRIsString.split(',');
-
-  let store = $rdf.graph();
-
-  const fetcher = createRdfFetcher(store);
-
-  let facetsItems = {
-    labelType: [],
-    numericType: []
-  }
-
-  for (let facetIRI of facetsIRIs) {
-    // Load facet's information
-    await fetcher.load(fetchableURI(facetIRI)).then(async response => {
-      let facetNode = $rdf.sym(utf8ToUnicode(facetIRI));
-
-      let facetQuery = store.any(facetNode, BROWSER('facetQuery')).value;
-      let title = store.any(facetNode, DCT("title")).value;
-      let type = store.any(facetNode, BROWSER("facetType")).value;
-      let description = store.any(facetNode, DCT("description")).value;
-      let datasetIri = store.any(facetNode, BROWSER("hasDataset")).value;
-
-      let facet = {
-        iri: facetIRI,
-        title: title,
-        type: type,
-        description: description,
-        query: facetQuery,
-        dataset: {}
-      }
-
-      // Load information about facets' dataset
-      await fetcher.load(fetchableURI(datasetIri)).then(async response => {
-        let datasetNode = $rdf.sym(utf8ToUnicode(datasetIri));
-
-        let endpoint = store.any(datasetNode, VOID("sparqlEndpoint")).value;
-        let accept = store.any(datasetNode, BROWSER("accept")).value;
-
-        facet.dataset.endpoint = endpoint;
-        facet.dataset.accept = accept;
-
-        // Prepare and send a query to get labels or min/max values for currently loaded nodes
-        switch (facet.type) {
-          case "label":
-            let labels = await getFacetLabels(facet, currentNodesIRIs);
-
-            let labelTypeFacetValues = {
-              facetIRI: facet.iri,
-              title: facet.title,
-              description: facet.description,
-              labels: labels,
-              // Currently selected labels (by a user)
-              // for front-end
-              selectedLabels: []
-            }
-
-            facetsItems.labelType.push(labelTypeFacetValues);
-            break;
-
-          case "numeric":
-            let extrema = await getFacetExtrema(facet, currentNodesIRIs);
-
-            let numericTypeFacetValues = {
-              facetIRI: facet.iri,
-              title: facet.title,
-              description: facet.description,
-              minPossible: extrema[0],
-              maxPossible: extrema[1],
-              // Selected range for front-end
-              selectedRange: [extrema[0], extrema[1]]
-            }
-
-            facetsItems.numericType.push(numericTypeFacetValues);
-            break;
-        }
-      }, err => {
-        console.log("Load failed " + err);
-      });
-    }, err => {
-      console.log("Load failed " + err);
-    });
-  }
-
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.contentType('application/json');
-
-  res.send(JSON.stringify(facetsItems));
-});
-
-/**
- * Fetches and parses labels for the given facet and nodes. 
- * This function prepares and sends a SPARQL query to a SPARQL 
- * endpoint and parses its response.
- * @param {object} facet object representing a facet.
- * @param {string[]} currentNodesIRIs list of nodes' iris.
- * @return {Promise<string[]>} a list containing found labels.
- */
-function getFacetLabels(facet, currentNodesIRIs) {
-  // Prepare a SPARQL query
-  nodeIRIsString = "";
-  for (let nodeIRI of currentNodesIRIs) {
-    nodeIRIsString += "<" + nodeIRI + ">" + " ";
-  }
-
-  const groundedQuery = facet.query.replace("WHERE {", "WHERE { VALUES ?node {" + nodeIRIsString + "}");
-
-  return new Promise(function (resolve, reject) {
-    let labels = [];
-
-    // Prepare a HTTP request
-    let options = {
-      headers: {
-        'User-Agent': 'https://github.com/martinnec/kgbrowser',
-      }
-    };
-
-    let accept = facet.dataset.accept;
-
-    // Check if accept is defined for the datacet
-    if (accept) {
-      options.headers['Accept'] = accept;
-    } else {
-      options.headers['Accept'] = "text/turtle";
-    }
-
-    options.url = facet.dataset.endpoint + '?query=' + encodeURIComponent(groundedQuery);
-
-    // Send the request to a SPARQL endpoint
-    request(options, function (error, response, body) {
-      try {
-        if (error) {
-          res.send("Oops, something happened and couldn't fetch data");
-        } else {
-          // Check what the dataset accepts and parse its respond to RDF triples
-          let resultStore = $rdf.graph();
-
-          if (accept === "application/sparql-results+json") {
-            parseSPARQLResultsJSON(body, resultStore, facet.iri);
-          } else {
-            $rdf.parse(body, resultStore, facet.iri, accept);
-          }
-
-          let statements = resultStore.match(null, null, null);
-
-          for (let statement of statements) {
-            let label = statement.object.value
-
-            if (!labels.includes(label)) {
-              labels.push(label)
-            }
-          }
-
-          resolve(labels);
-        }
-      } catch (e) {
-        console.log(e);
-      }
-    });
-  })
-}
-
-/**
- * Fetches and returns min and max values for the given numeric facet and nodes. 
- * This function prepares and sends a SPARQL query to a SPARQL 
- * endpoint and parses its response.
- * @param {object} facet object representing a facet.
- * @param {string[]} currentNodesIRIs list of nodes' iris.
- * @return {Promise<number[]>} a list containing min and max values for the 
- * given numeric facet and nodes.
- */
-function getFacetExtrema(facet, currentNodesIRIs) {
-  // Prepare a SPARQL query
-  nodeIRIsString = "";
-  for (let nodeIRI of currentNodesIRIs) {
-    nodeIRIsString += "<" + nodeIRI + ">" + " ";
-  }
-
-  const groundedQuery = facet.query.replace("#INSERTNODES", "VALUES ?node {" + nodeIRIsString + "}");
-
-  console.log(groundedQuery);
-
-  return new Promise(function (resolve, reject) {
-    let extrema = [-1, -1];
-
-    // Prepare a HTTP request
-    let options = {
-      headers: {
-        'User-Agent': 'https://github.com/martinnec/kgbrowser',
-      }
-    };
-
-    let accept = facet.dataset.accept;
-
-    // Check if accept is defined for the datacet
-    if (accept) {
-      options.headers['Accept'] = accept;
-    } else {
-      options.headers['Accept'] = "text/turtle";
-    }
-
-    options.url = facet.dataset.endpoint + '?query=' + encodeURIComponent(groundedQuery);
-
-    // Send the request to a SPARQL endpoint
-    request(options, function (error, response, body) {
-      try {
-        if (error) {
-          res.send("Oops, something happened and couldn't fetch data");
-        } else {
-          // Check what the dataset accepts and parse its respond to RDF triples
-          let resultStore = $rdf.graph();
-
-          if (accept === "application/sparql-results+json") {
-            parseSPARQLResultsJSON(body, resultStore, facet.iri);
-          } else {
-            $rdf.parse(body, resultStore, facet.iri, accept);
-          }
-
-          let statements = resultStore.match(null, null, null);
-
-          let values = [];
-
-          for (let statement of statements) {
-            let value = statement.object.value
-            values.push(value);
-          }
-
-          extrema[0] = Math.min(...values);
-          extrema[1] = Math.max(...values);
-
-          resolve(extrema);
-        }
-      } catch (e) {
-        console.log(e);
-      }
-    });
-  })
-
-
-
-}
-
-// Sends a SPARQL query and filter the given nodes.
-// Calls all filtering queries of facets one by one
-app.get('/filter-by-facets', async function (req, res) {
-  let facetsParams = JSON.parse(req.query.facetsParams).facetParams;
-
-  let nodes = req.query.currentNodesIRIs.split(",");
-
-  let store = $rdf.graph();
-  const fetcher = createRdfFetcher(store);
-
-  for (let facetParam of facetsParams) {
-    // Load facet's information
-    await fetcher.load(fetchableURI(facetParam.facetIRI)).then(async response => {
-      let facetNode = $rdf.sym(utf8ToUnicode(facetParam.facetIRI));
-
-      let facetQuery = store.any(facetNode, BROWSER('facetQuery')).value;
-      let type = store.any(facetNode, BROWSER("facetType")).value;
-      let datasetIri = store.any(facetNode, BROWSER("hasDataset")).value;
-
-      let facet = {
-        iri: facetParam.facetIRI,
-        type: type,
-        chosenParams: facetParam.chosenParams,
-        query: facetQuery,
-        dataset: {}
-      }
-
-      // Load facet's dataset information
-      await fetcher.load(fetchableURI(datasetIri)).then(async response => {
-        let datasetNode = $rdf.sym(utf8ToUnicode(datasetIri));
-
-        let endpoint = store.any(datasetNode, VOID("sparqlEndpoint")).value;
-        let accept = store.any(datasetNode, BROWSER("accept")).value;
-
-        facet.dataset.endpoint = endpoint;
-        facet.dataset.accept = accept;
-
-        // Tu robiť rozlíšenie medzi typmi facetov
-        nodes = await filterByFacetLabelType(facet, nodes);
-      }, err => {
-        console.log("Load failed " + err);
-      });
-    }, err => {
-      console.log("Load failed " + err);
-    });
-  }
-
-  let filteredNodesIRIs = { nodesIRIs: nodes };
-
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.contentType('application/json');
-
-  res.send(JSON.stringify(filteredNodesIRIs));
-});
-
-/**
- * Returns a list of nodes that passed the facet's filtering query. 
- * Nodes are specified by their IRI.
- * @param {object} facet object representing a facet.
- * @param {string[]} currentNodesIRIs list of nodes' iris.
- * @return {Promise<string[]>} a list containing filtered nodes.
- */
-function filterByFacetLabelType(facet, currentNodesIRIs) {
-  // Prepare a SPARQL query
-  let subjectIRIsString = "";
-  for (let subjectNodeIRI of currentNodesIRIs) {
-    subjectIRIsString += "<" + subjectNodeIRI + ">" + " ";
-  }
-
-  let subjectValues = "VALUES ?node {" + subjectIRIsString + "}";
-
-  let objectIRIsString = "";
-  for (let objectNodeIRI of facet.chosenParams) {
-    objectIRIsString += "\"" + objectNodeIRI + "\"@en" + " ";
-  }
-
-  let objectValues = "VALUES ?targetNode {" + objectIRIsString + "}";
-
-  const groundedQuery = facet.query.replace("WHERE {", "WHERE { " + subjectValues + " " + objectValues);
-
-  return new Promise(function (resolve, reject) {
-    let filteredNodesIRIs = [];
-
-    // Prepare a HTTP request
-    let options = {
-      headers: {
-        'User-Agent': 'https://github.com/martinnec/kgbrowser',
-      }
-    };
-
-    let accept = facet.dataset.accept;
-
-    // Check if accept is defined for the datacet
-    if (accept) {
-      options.headers['Accept'] = accept;
-    } else {
-      options.headers['Accept'] = "text/turtle";
-    }
-
-    options.url = facet.dataset.endpoint + '?query=' + encodeURIComponent(groundedQuery);
-
-    // Send the request to a SPARQL endpoint
-    request(options, function (error, response, body) {
-      try {
-        if (error) {
-          res.send("Oops, something happened and couldn't fetch data");
-        } else {
-          // Check what the dataset accepts and parse its respond to RDF triples
-          let resultStore = $rdf.graph();
-
-          if (accept === "application/sparql-results+json") {
-            parseSPARQLResultsJSON(body, resultStore, facet.iri);
-          } else {
-            $rdf.parse(body, resultStore, facet.iri, accept);
-          }
-
-          let statements = resultStore.match(null, null, null);
-
-          for (let statement of statements) {
-            let filteredNodeIRI = statement.subject.value;
-            filteredNodesIRIs.push(filteredNodeIRI);
-          }
-
-          resolve(filteredNodesIRIs);
-        }
-      } catch (e) {
-        console.log(e);
-      }
-    });
-  })
-}
-
-// Return a list of nodes that passed the facet's filter.
-// Nodes are specified by their IRI.
-async function filterByFacetNumericType(facet, currentNodesIRIs) {
-  console.log(facet.chosenParams);
-  let min = facet.chosenParams[0];
-  let max = facet.chosenParams[1];
-
-
-  // Einstein
-  return ["http://www.wikidata.org/entity/Q937"]
-}
-
-// Return a list of nodes that passed the facet's filter.
-// Nodes are specified by their IRI.
-async function filterByFacetNumOfEdgesType(facet, currentNodesIRIs) {
-  console.log(facet.chosenParams);
-  let min = facet.chosenParams[0];
-  let max = facet.chosenParams[1];
-
-
-
-  // Einstein
-  return ["http://www.wikidata.org/entity/Q937"]
-}
 
 app.get('/view-sets', function (req, res) {
 
