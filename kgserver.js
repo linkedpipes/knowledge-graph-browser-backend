@@ -115,7 +115,7 @@ app.get('/facets-items', function (req, res) {
 
                     items.push({
                       nodeIRI: subject,
-                      itemValue: object
+                      value: object
                     })
                   }
 
