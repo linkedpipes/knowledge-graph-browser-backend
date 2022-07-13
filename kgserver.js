@@ -1,6 +1,5 @@
 const express = require('express');
 const request = require('request');
-const URI = require('uri-js');
 const $rdf = require('rdflib');
 
 const app = express();
@@ -11,14 +10,11 @@ const DCT = $rdf.Namespace("http://purl.org/dc/terms/");
 const DCE = $rdf.Namespace("http://purl.org/dc/elements/1.1/");
 const VOID = $rdf.Namespace("http://rdfs.org/ns/void#");
 const BROWSER = $rdf.Namespace("https://linked.opendata.cz/ontology/knowledge-graph-browser/");
-const RS = $rdf.Namespace("http://www.w3.org/2005/sparql-results#");
 const SKOS = $rdf.Namespace("http://www.w3.org/2004/02/skos/core#");
 const RDFS = $rdf.Namespace("http://www.w3.org/2000/01/rdf-schema#");
 
 app.get('/', function (req, res) {
-
   res.setHeader('Access-Control-Allow-Origin', '*');
-
 })
 
 // Gets values for facets - prepares and sends a SPARQL query to a SPARQL 
