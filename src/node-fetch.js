@@ -1501,6 +1501,17 @@ function fetch(url, opts) {
 
       const headers = createHeadersLenient(res.headers);
 
+      // WORKAROUND
+      // We get UTF-8 characters in the 'Location" header.
+      // For example
+      //  https://linked.opendata.cz/resource/knowledge-graph-browser/view/uk/nadřazená-pracoviště
+      // returns
+      //  https://linked.opendata.cz/sparql?query=define%20sql%3Adescribe-mode%20%22CBD%22%20%20DESCRIBE%20%3Chttps%3A%2F%2Flinked.opendata.cz%2Fresource%2Fknowledge-graph-browser%2Fview%2Fuk%2Fnad%C5%99azená-pracovi%C5%A1t%C4%9B%3E&format=text%2Fn3
+      // notice the 'á'.
+      if (headers.has('Location')) {
+        headers.set('Location', Buffer.from(headers.get('Location'), 'ascii').toString('utf-8'));
+      }
+
       // HTTP fetch step 5
       if (fetch.isRedirect(res.statusCode)) {
         // HTTP fetch step 5.2
