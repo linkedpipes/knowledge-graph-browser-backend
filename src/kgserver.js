@@ -1,9 +1,11 @@
+const cors = require('cors');
 const express = require("express");
 const request = require("request");
 const $rdf = require("rdflib");
 const fetch = require("./node-fetch");
 
 const app = express();
+app.use(cors());
 const port = 3000;
 
 const RDF = $rdf.Namespace("http://www.w3.org/1999/02/22-rdf-syntax-ns#");
@@ -13,10 +15,6 @@ const VOID = $rdf.Namespace("http://rdfs.org/ns/void#");
 const BROWSER = $rdf.Namespace("https://linked.opendata.cz/ontology/knowledge-graph-browser/");
 const SKOS = $rdf.Namespace("http://www.w3.org/2004/02/skos/core#");
 const RDFS = $rdf.Namespace("http://www.w3.org/2000/01/rdf-schema#");
-
-app.get("/", function (req, res) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-});
 
 // Gets values for facets - prepares and sends a SPARQL query to a SPARQL 
 // endpoint and parses its response
@@ -143,7 +141,7 @@ app.get("/facets-items", function (req, res) {
       });
     }
 
-    res.setHeader("Access-Control-Allow-Origin", "*");
+  
     res.contentType("application/json");
 
     res.send(JSON.stringify({ facetsItems: facetsItems }));
@@ -152,9 +150,6 @@ app.get("/facets-items", function (req, res) {
 });
 
 app.get("/view-sets", function (req, res) {
-
-  res.setHeader("Access-Control-Allow-Origin", "*");
-
   const configIRI = req.query.config;
   const resourceIRI = req.query.resource;
 
@@ -283,11 +278,7 @@ function createRdfFetcher(store) {
   return fetcher;
 }
 
-
 app.get("/expand", function (req, res) {
-
-  res.setHeader("Access-Control-Allow-Origin", "*");
-
   const viewIRI = req.query.view;
   const resourceIRI = req.query.resource;
 
@@ -446,9 +437,6 @@ app.get("/expand", function (req, res) {
 });
 
 app.get("/preview", function (req, res) {
-
-  res.setHeader("Access-Control-Allow-Origin", "*");
-
   const viewIRI = req.query.view;
   const resourceIRI = req.query.resource;
 
@@ -565,9 +553,6 @@ app.get("/preview", function (req, res) {
 });
 
 app.get("/detail", function (req, res) {
-
-  res.setHeader("Access-Control-Allow-Origin", "*");
-
   const viewIRI = req.query.view;
   const resourceIRI = req.query.resource;
 
@@ -680,9 +665,6 @@ app.get("/detail", function (req, res) {
 });
 
 app.get("/stylesheet", function (req, res) {
-
-  res.setHeader("Access-Control-Allow-Origin", "*");
-
   const stylesheetIRI = req.query.stylesheet;
 
   let store = $rdf.graph();
@@ -770,7 +752,6 @@ app.get("/stylesheet", function (req, res) {
  *             languages Comma separated ISO 639-1 languages. If there is not at least one literal for one given language, random (language) is returned.
  */
 app.get("/meta-configuration", function (req, res) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
   const metaConfigurationIRI = req.query.iri;
   const languages = req.query.languages.split(",");
 
@@ -822,7 +803,6 @@ app.get("/meta-configuration", function (req, res) {
  *             languages Comma separated ISO 639-1 languages. If there is not at least one literal for one given language, random (language) is returned.
  */
 app.get("/configuration", function (req, res) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
   const configurationIRI = req.query.iri;
   const languages = req.query.languages.split(",");
 
