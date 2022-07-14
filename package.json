@@ -1,21 +1,12 @@
 {
   "name": "kgbrowser",
   "version": "1.0.0",
-  "description": "",
+  "private": true,
   "scripts": {
     "start": "node ./src/kgserver.js",
     "lint": "eslint --ext .js --ignore-path .gitignore ./src/ --fix"
   },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/skodapetr/kgbrowser.git"
-  },
-  "author": "",
   "license": "ISC",
-  "bugs": {
-    "url": "https://github.com/skodapetr/kgbrowser/issues"
-  },
-  "homepage": "https://github.com/skodapetr/kgbrowser#readme",
   "dependencies": {
     "cors": "^2.8.5",
     "express": "^4.18.1",
