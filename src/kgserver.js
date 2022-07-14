@@ -1,6 +1,7 @@
 const express = require("express");
 const request = require("request");
 const $rdf = require("rdflib");
+const fetch = require("./node-fetch");
 
 const app = express();
 const port = 3000;
@@ -274,8 +275,14 @@ app.get("/view-sets", function (req, res) {
 function createRdfFetcher(store) {
   const fetcher = new $rdf.Fetcher(store);
   fetcher.mediatypes["application/xhtml+xml"] = { "q": 0.9 };
+  fetcher._fetch = (input, init) => {
+    // We need headers in this format.
+    init.headers = {...init.headers};
+    return fetch(input, init);
+  };
   return fetcher;
 }
+
 
 app.get("/expand", function (req, res) {
 
