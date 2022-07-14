@@ -141,7 +141,7 @@ app.get("/facets-items", function (req, res) {
       });
     }
 
-  
+
     res.contentType("application/json");
 
     res.send(JSON.stringify({ facetsItems: facetsItems }));
@@ -436,118 +436,113 @@ app.get("/expand", function (req, res) {
 
 });
 
-app.get("/preview", function (req, res) {
+app.get("/preview", async function (req, res) {
   const viewIRI = req.query.view;
   const resourceIRI = req.query.resource;
 
-  let store = $rdf.graph();
-  const view = $rdf.sym(utf8ToUnicode(viewIRI));
+  const store = $rdf.graph();
   const fetcher = createRdfFetcher(store);
 
-  fetcher.load(fetchableURI(viewIRI)).then(() => {
-    const preview = store.any(view, BROWSER("hasPreview"), undefined);
-    fetcher.load(fetchableURI(preview.value)).then(() => {
-      const dataset = store.any(preview, BROWSER("hasDataset"), undefined);
-      const query = store.any(preview, BROWSER("query"), undefined);
-      const groundedQuery = query.value.replace("WHERE {", "WHERE { VALUES ?node {<" + resourceIRI + ">}");
-      fetcher.load(fetchableURI(dataset.value)).then(() => {
-        const endpoint = store.any(dataset, VOID("sparqlEndpoint"), undefined);
-        const accept = store.any(dataset, BROWSER("accept"), undefined);
-        let options = {
-          headers: {
-            "User-Agent": "https://github.com/martinnec/kgbrowser",
-          }
-        };
-        if (accept) {
-          options.headers["Accept"] = accept.value;
-          options.url = endpoint.value + "?query=" + encodeURIComponent(groundedQuery);
-        } else {
-          options.headers["Accept"] = "text/turtle";
-          options.url = endpoint.value + "?query=" + encodeURIComponent(groundedQuery);
-        }
-        console.log("preview:\n" + options.url);
-        request(options, function (error, response, body) {
-          try {
-            if (error) {
-              res.send("Oops, something happened and couldn't fetch data");
-            } else {
-              let resultStore = $rdf.graph();
-              let resource = $rdf.sym(utf8ToUnicode(resourceIRI));
-              if (options.headers["Accept"] == "application/sparql-results+json") {
-                parseSPARQLResultsJSON(body, resultStore, resourceIRI);
-              } else {
-                $rdf.parse(body, resultStore, resourceIRI, options.headers["Accept"]);
-              }
-              const label = getResourceLabel(resultStore, resource);
-              let output = {
-                nodes: [{
-                  iri: unicodeToUTF8(resourceIRI),
-                  type: unicodeToUTF8(resultStore.any(resource, RDF("type"), undefined).value),
-                  label: label.value
-                }],
-                types: []
-              };
-              const stmtsClasses = resultStore.match(resource, BROWSER("class"));
-              output.nodes[0].classes = [];
-              for (let i in stmtsClasses) {
-                const stmtClass = stmtsClasses[i];
-                output.nodes[0].classes.push(stmtClass.object.value);
-              }
-              const stmts = resultStore.match(resource, RDF("type"));
-              let typesSet = new Set();
-              for (let i in stmts) {
-                const stmt = stmts[i];
-                if (!typesSet.has(stmt.object.value)) {
-                  typesSet.add(stmt.object.value);
-                }
-              }
+  await fetcher.load(fetchableURI(viewIRI));
+  const view = $rdf.sym(utf8ToUnicode(viewIRI));
+  const preview = store.any(view, BROWSER("hasPreview"), undefined);
 
-              let promises = [];
-              for (let typeIRIUnicode of typesSet) {
-                promises.push(new Promise((resolve, reject) => {
-                  let store = $rdf.graph();
-                  const fetcher = createRdfFetcher(store);
-                  const typeIRI = fetchableURI(typeIRIUnicode);
-                  const type = $rdf.sym(typeIRIUnicode);
-                  fetcher.load(typeIRI).then(() => {
-                    const label = getResourceLabel(store, type);
-                    const description = getResourceDescription(store, type);
-                    let node = {
-                      iri: unicodeToUTF8(typeIRIUnicode),
-                    };
-                    if (label) {
-                      node.label = label.value;
-                    }
-                    if (description) {
-                      node.description = description.value;
-                    }
-                    output.types.push(node);
-                    resolve(typeIRI);
-                  }, err => {
-                    console.log("Load failed " + err);
-                    reject(typeIRI);
-                  });
-                }));
-              }
-              Promise.all(promises).then(() => {
-                res.contentType("application/json");
-                res.send(JSON.stringify(output));
-              }, err => {
-                console.log("Load failed " + err);
-              });
-            }
-          } catch (e) {
-            console.log(e);
+  await fetcher.load(fetchableURI(preview.value));
+  const dataset = store.any(preview, BROWSER("hasDataset"), undefined);
+  const query = store.any(preview, BROWSER("query"), undefined);
+  const groundedQuery = query.value.replace("WHERE {", "WHERE { VALUES ?node {<" + resourceIRI + ">}");
+
+  await fetcher.load(fetchableURI(dataset.value));
+
+  const endpoint = store.any(dataset, VOID("sparqlEndpoint"), undefined);
+  const accept = store.any(dataset, BROWSER("accept"), undefined);
+  let options = {
+    "headers": {
+      "User-Agent": "https://github.com/martinnec/kgbrowser",
+    }
+  };
+  if (accept) {
+    options.headers["Accept"] = accept.value;
+    options.url = endpoint.value + "?query=" + encodeURIComponent(groundedQuery);
+  } else {
+    options.headers["Accept"] = "text/turtle";
+    options.url = endpoint.value + "?query=" + encodeURIComponent(groundedQuery);
+  }
+
+  console.log("preview:\n  " + options.url);
+  request(options, function (error, response, body) {
+    try {
+      if (error) {
+        res.send("Oops, something happened and couldn't fetch data");
+      } else {
+        let resultStore = $rdf.graph();
+        let resource = $rdf.sym(utf8ToUnicode(resourceIRI));
+        if (options.headers["Accept"] === "application/sparql-results+json") {
+          parseSPARQLResultsJSON(body, resultStore, resourceIRI);
+        } else {
+          $rdf.parse(body, resultStore, resourceIRI, options.headers["Accept"]);
+        }
+        const label = getResourceLabel(resultStore, resource);
+        let output = {
+          nodes: [{
+            iri: unicodeToUTF8(resourceIRI),
+            type: unicodeToUTF8(resultStore.any(resource, RDF("type"), undefined).value),
+            label: label.value
+          }],
+          types: []
+        };
+        const stmtsClasses = resultStore.match(resource, BROWSER("class"));
+        output.nodes[0].classes = [];
+        for (let i in stmtsClasses) {
+          const stmtClass = stmtsClasses[i];
+          output.nodes[0].classes.push(stmtClass.object.value);
+        }
+        const stmts = resultStore.match(resource, RDF("type"));
+        let typesSet = new Set();
+        for (let i in stmts) {
+          const stmt = stmts[i];
+          if (!typesSet.has(stmt.object.value)) {
+            typesSet.add(stmt.object.value);
           }
+        }
+
+        let promises = [];
+        for (let typeIRIUnicode of typesSet) {
+          promises.push(new Promise((resolve, reject) => {
+            let store = $rdf.graph();
+            const fetcher = createRdfFetcher(store);
+            const typeIRI = fetchableURI(typeIRIUnicode);
+            const type = $rdf.sym(typeIRIUnicode);
+            fetcher.load(typeIRI).then(() => {
+              const label = getResourceLabel(store, type);
+              const description = getResourceDescription(store, type);
+              let node = {
+                iri: unicodeToUTF8(typeIRIUnicode),
+              };
+              if (label) {
+                node.label = label.value;
+              }
+              if (description) {
+                node.description = description.value;
+              }
+              output.types.push(node);
+              resolve(typeIRI);
+            }, err => {
+              console.log("Load failed " + err);
+              reject(typeIRI);
+            });
+          }));
+        }
+        Promise.all(promises).then(() => {
+          res.contentType("application/json");
+          res.send(JSON.stringify(output));
+        }, err => {
+          console.log("Load failed " + err);
         });
-      }, err => {
-        console.log("Load failed " + err);
-      });
-    }, err => {
-      console.log("Load failed " + err);
-    });
-  }, err => {
-    console.log("Load failed " + err);
+      }
+    } catch (e) {
+      console.log(e);
+    }
   });
 
 });
