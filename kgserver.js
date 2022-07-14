@@ -1,6 +1,6 @@
-const express = require('express');
-const request = require('request');
-const $rdf = require('rdflib');
+const express = require("express");
+const request = require("request");
+const $rdf = require("rdflib");
 
 const app = express();
 const port = 3000;
@@ -13,56 +13,56 @@ const BROWSER = $rdf.Namespace("https://linked.opendata.cz/ontology/knowledge-gr
 const SKOS = $rdf.Namespace("http://www.w3.org/2004/02/skos/core#");
 const RDFS = $rdf.Namespace("http://www.w3.org/2000/01/rdf-schema#");
 
-app.get('/', function (req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-})
+app.get("/", function (req, res) {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+});
 
 // Gets values for facets - prepares and sends a SPARQL query to a SPARQL 
 // endpoint and parses its response
-app.get('/facets-items', function (req, res) {
+app.get("/facets-items", function (req, res) {
   const configIRI = req.query.configIRI;
 
   let store = $rdf.graph();
 
   const fetcher = createRdfFetcher(store);
 
-  fetcher.load(fetchableURI(configIRI)).then(async response => {
-    var configNode = $rdf.sym(utf8ToUnicode(configIRI));
-    var hasFacet = BROWSER('hasFacet');
+  fetcher.load(fetchableURI(configIRI)).then(async () => {
+    let configNode = $rdf.sym(utf8ToUnicode(configIRI));
+    let hasFacet = BROWSER("hasFacet");
 
-    var facetsNodes = store.each(configNode, hasFacet);
+    let facetsNodes = store.each(configNode, hasFacet);
 
     let facetsIRIs = [];
 
-    for (var i = 0; i < facetsNodes.length; i++) {
-      facetsIRIs.push(facetsNodes[i].value)
+    for (let i = 0; i < facetsNodes.length; i++) {
+      facetsIRIs.push(facetsNodes[i].value);
     }
 
     let currentNodesIRIsString = req.query.currentNodesIRIs;
-    let currentNodesIRIs = currentNodesIRIsString.split(',');
+    let currentNodesIRIs = currentNodesIRIsString.split(",");
 
     let facetsItems = [];
 
     for (let facetIRI of facetsIRIs) {
       // Load facet's information
-      await fetcher.load(fetchableURI(facetIRI)).then(async response => {
+      await fetcher.load(fetchableURI(facetIRI)).then(async () => {
         let facetNode = $rdf.sym(utf8ToUnicode(facetIRI));
 
-        let query = store.any(facetNode, BROWSER('facetQuery')).value;
+        let query = store.any(facetNode, BROWSER("facetQuery")).value;
         let title = store.any(facetNode, DCT("title")).value;
         let type = store.any(facetNode, BROWSER("facetType")).value;
         let description = store.any(facetNode, DCT("description")).value;
         let datasetIri = store.any(facetNode, BROWSER("hasDataset")).value;
 
         // Load information about facet's dataset
-        await fetcher.load(fetchableURI(datasetIri)).then(async response => {
+        await fetcher.load(fetchableURI(datasetIri)).then(async () => {
           let datasetNode = $rdf.sym(utf8ToUnicode(datasetIri));
 
           let endpoint = store.any(datasetNode, VOID("sparqlEndpoint")).value;
           let accept = store.any(datasetNode, BROWSER("accept")).value;
 
           // Prepare a SPARQL query
-          nodeIRIsString = "";
+          let nodeIRIsString = "";
           for (let nodeIRI of currentNodesIRIs) {
             nodeIRIsString += "<" + nodeIRI + ">" + " ";
           }
@@ -70,21 +70,21 @@ app.get('/facets-items', function (req, res) {
           const groundedQuery = query.replace("#INSERTNODES", "VALUES ?node {" + nodeIRIsString + "}");
 
           // Prepare a HTTP request
-          let requestPromise = new Promise((resolve, reject) => {
+          let requestPromise = new Promise((resolve) => {
             let options = {
               headers: {
-                'User-Agent': 'https://github.com/martinnec/kgbrowser',
+                "User-Agent": "https://github.com/martinnec/kgbrowser",
               }
             };
 
             // Check if accept is defined for the datacet
             if (accept) {
-              options.headers['Accept'] = accept;
+              options.headers["Accept"] = accept;
             } else {
-              options.headers['Accept'] = "text/turtle";
+              options.headers["Accept"] = "text/turtle";
             }
 
-            options.url = endpoint + '?query=' + encodeURIComponent(groundedQuery);
+            options.url = endpoint + "?query=" + encodeURIComponent(groundedQuery);
 
             // Send the request to a SPARQL endpoint
             request(options, function (error, response, body) {
@@ -92,7 +92,7 @@ app.get('/facets-items', function (req, res) {
                 if (error) {
                   res.send("Oops, something happened and couldn't fetch data");
                 } else {
-                  // Check what the dataset accepts and parse its respond to RDF triples
+                  // Check what the dataset accepts and parse its response to RDF triples
                   let resultStore = $rdf.graph();
 
                   if (accept === "application/sparql-results+json") {
@@ -106,13 +106,13 @@ app.get('/facets-items', function (req, res) {
                   let items = [];
 
                   for (let statement of statements) {
-                    let subject = statement.subject.value
-                    let object = statement.object.value
+                    let subject = statement.subject.value;
+                    let object = statement.object.value;
 
                     items.push({
                       nodeIRI: subject,
                       value: object
-                    })
+                    });
                   }
 
                   const facet = {
@@ -121,7 +121,7 @@ app.get('/facets-items', function (req, res) {
                     type: type,
                     description: description,
                     items: items
-                  }
+                  };
 
                   resolve(facet);
                 }
@@ -129,7 +129,7 @@ app.get('/facets-items', function (req, res) {
                 console.log(e);
               }
             });
-          })
+          });
 
           let facet = await requestPromise;
 
@@ -142,17 +142,17 @@ app.get('/facets-items', function (req, res) {
       });
     }
 
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.contentType('application/json');
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.contentType("application/json");
 
     res.send(JSON.stringify({ facetsItems: facetsItems }));
 
   });
 });
 
-app.get('/view-sets', function (req, res) {
+app.get("/view-sets", function (req, res) {
 
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader("Access-Control-Allow-Origin", "*");
 
   const configIRI = req.query.config;
   const resourceIRI = req.query.resource;
@@ -161,24 +161,24 @@ app.get('/view-sets', function (req, res) {
   const config = $rdf.sym(utf8ToUnicode(configIRI));
   const fetcher = createRdfFetcher(store);
 
-  fetcher.load(fetchableURI(configIRI)).then(response => {
+  fetcher.load(fetchableURI(configIRI)).then(() => {
     let viewSets = store.each(config, BROWSER("hasViewSet"), undefined);
     Promise.all(
       viewSets.map(
         function (viewSet) {
           return new Promise((resolve, reject) => {
-            fetcher.load(fetchableURI(viewSet.value)).then(response => {
+            fetcher.load(fetchableURI(viewSet.value)).then(() => {
               const condition = store.any(viewSet, BROWSER("hasCondition"), undefined);
               const dataset = store.any(viewSet, BROWSER("hasDataset"), undefined);
-              fetcher.load(fetchableURI(dataset.value)).then(reponse => {
+              fetcher.load(fetchableURI(dataset.value)).then(() => {
                 const endpoint = store.any(dataset, VOID("sparqlEndpoint"), undefined);
-                const groundedCondition = condition.value.replace('ASK {', 'ASK { VALUES ?node {<' + resourceIRI + '>}');
-                const groundedConditionQueryURL = endpoint.value + '?query=' + encodeURIComponent(groundedCondition) + '&format=text%2Fplain'
+                const groundedCondition = condition.value.replace("ASK {", "ASK { VALUES ?node {<" + resourceIRI + ">}");
+                const groundedConditionQueryURL = endpoint.value + "?query=" + encodeURIComponent(groundedCondition) + "&format=text%2Fplain";
                 console.log("view-sets:\n" + groundedConditionQueryURL);
                 const options = {
                   url: groundedConditionQueryURL,
                   headers: {
-                    'User-Agent': 'https://github.com/martinnec/kgbrowser',
+                    "User-Agent": "https://github.com/martinnec/kgbrowser",
                   }
                 };
                 request(options, function (error, response, body) {
@@ -187,7 +187,7 @@ app.get('/view-sets', function (req, res) {
                       res.send("Oops, something happened and couldn't fetch data");
                       reject(viewSet.value);
                     } else {
-                      if (body.includes('true')) {
+                      if (body.includes("true")) {
                         resolve(viewSet);
                       }
                       resolve(null);
@@ -225,16 +225,16 @@ app.get('/view-sets', function (req, res) {
             defaultView: unicodeToUTF8(store.any(viewSet, BROWSER("hasDefaultView"), undefined).value),
             views: store.each(viewSet, BROWSER("hasView"), undefined).map(
               function (view) {
-                return unicodeToUTF8(view.value)
+                return unicodeToUTF8(view.value);
               }
             )
-          }
+          };
           output.viewSets.push(viewSetOutput);
           for (let i in views) {
             let view = views[i];
             promises.push(
               new Promise((resolve, reject) => {
-                fetcher.load(fetchableURI(view.value)).then(response => {
+                fetcher.load(fetchableURI(view.value)).then(() => {
                   const label = store.any(view, DCT("title"), undefined);
                   resolve({
                     iri: unicodeToUTF8(view.value),
@@ -257,7 +257,7 @@ app.get('/view-sets', function (req, res) {
             output.views.push(viewOutput);
           }
         }
-        res.contentType('application/json');
+        res.contentType("application/json");
         res.send(JSON.stringify(output));
       }, err => {
         console.log("Load failed " + err);
@@ -277,9 +277,9 @@ function createRdfFetcher(store) {
   return fetcher;
 }
 
-app.get('/expand', function (req, res) {
+app.get("/expand", function (req, res) {
 
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader("Access-Control-Allow-Origin", "*");
 
   const viewIRI = req.query.view;
   const resourceIRI = req.query.resource;
@@ -288,26 +288,26 @@ app.get('/expand', function (req, res) {
   const view = $rdf.sym(utf8ToUnicode(viewIRI));
   const fetcher = createRdfFetcher(store);
 
-  fetcher.load(fetchableURI(viewIRI)).then(response => {
+  fetcher.load(fetchableURI(viewIRI)).then(() => {
     const expansion = store.any(view, BROWSER("hasExpansion"), undefined);
-    fetcher.load(fetchableURI(expansion.value)).then(reponse => {
+    fetcher.load(fetchableURI(expansion.value)).then(() => {
       const dataset = store.any(expansion, BROWSER("hasDataset"), undefined);
       const query = store.any(expansion, BROWSER("query"), undefined);
-      const groundedQuery = query.value.replace('WHERE {', 'WHERE { VALUES ?node {<' + resourceIRI + '>}');
-      fetcher.load(fetchableURI(dataset.value)).then(reponse => {
+      const groundedQuery = query.value.replace("WHERE {", "WHERE { VALUES ?node {<" + resourceIRI + ">}");
+      fetcher.load(fetchableURI(dataset.value)).then(() => {
         const endpoint = store.any(dataset, VOID("sparqlEndpoint"), undefined);
         const accept = store.any(dataset, BROWSER("accept"), undefined);
         let options = {
           headers: {
-            'User-Agent': 'https://github.com/martinnec/kgbrowser',
+            "User-Agent": "https://github.com/martinnec/kgbrowser",
           }
         };
         if (accept) {
-          options.headers['Accept'] = accept.value;
-          options.url = endpoint.value + '?query=' + encodeURIComponent(groundedQuery);
+          options.headers["Accept"] = accept.value;
+          options.url = endpoint.value + "?query=" + encodeURIComponent(groundedQuery);
         } else {
-          options.headers['Accept'] = "text/turtle";
-          options.url = endpoint.value + '?query=' + encodeURIComponent(groundedQuery);
+          options.headers["Accept"] = "text/turtle";
+          options.url = endpoint.value + "?query=" + encodeURIComponent(groundedQuery);
         }
         console.log("expand:\n" + options.url);
         request(options, function (error, response, body) {
@@ -316,10 +316,10 @@ app.get('/expand', function (req, res) {
               res.send("Oops, something happened and couldn't fetch data");
             } else {
               let resultStore = $rdf.graph();
-              if (options.headers['Accept'] == "application/sparql-results+json") {
+              if (options.headers["Accept"] == "application/sparql-results+json") {
                 parseSPARQLResultsJSON(body, resultStore, resourceIRI);
               } else {
-                $rdf.parse(body, resultStore, resourceIRI, options.headers['Accept']);
+                $rdf.parse(body, resultStore, resourceIRI, options.headers["Accept"]);
               }
               let statements = resultStore.match(null, null, null);
 
@@ -329,8 +329,6 @@ app.get('/expand', function (req, res) {
                 types: []
               };
               let nodesMap = new Map();
-              let nodeNamesMap = new Map();
-              let nodeTypesMap = new Map();
               let typesSet = new Set();
               for (let i in statements) {
                 let statement = statements[i];
@@ -341,7 +339,7 @@ app.get('/expand', function (req, res) {
                 if (!subject) {
                   subject = { iri: subjectIRI };
                 }
-                if (statement.object.termType == 'NamedNode') {
+                if (statement.object.termType == "NamedNode") {
                   objectValue = unicodeToUTF8(objectValue);
                   if (predicateIRI == RDF("type").value) {
                     if (!typesSet.has(objectValue)) {
@@ -355,11 +353,11 @@ app.get('/expand', function (req, res) {
                     if (!typesSet.has(predicateIRI)) {
                       typesSet.add(predicateIRI);
                     }
-                    edge = {
+                    const edge = {
                       source: subjectIRI,
                       target: objectValue,
                       type: predicateIRI
-                    }
+                    };
                     output.edges.push(edge);
                   }
                 } else {
@@ -396,12 +394,12 @@ app.get('/expand', function (req, res) {
                   const typeIRI = fetchableURI(typeIRIUTF8);
                   const typeIRIUnicode = utf8ToUnicode(typeIRIUTF8);
                   const type = $rdf.sym(typeIRIUnicode);
-                  fetcher.load(typeIRI).then(response => {
+                  fetcher.load(typeIRI).then(() => {
                     const label = getResourceLabel(store, type);
                     const description = getResourceDescription(store, type);
                     let node = {
                       iri: unicodeToUTF8(typeIRIUnicode),
-                    }
+                    };
                     if (label) {
                       node.label = label.value;
                     }
@@ -416,8 +414,8 @@ app.get('/expand', function (req, res) {
                   });
                 }));
               }
-              Promise.all(promises).then(response => {
-                res.contentType('application/json');
+              Promise.all(promises).then(() => {
+                res.contentType("application/json");
                 res.send(JSON.stringify(output));
               }, err => {
                 console.log("Load failed " + err);
@@ -440,9 +438,9 @@ app.get('/expand', function (req, res) {
 
 });
 
-app.get('/preview', function (req, res) {
+app.get("/preview", function (req, res) {
 
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader("Access-Control-Allow-Origin", "*");
 
   const viewIRI = req.query.view;
   const resourceIRI = req.query.resource;
@@ -451,26 +449,26 @@ app.get('/preview', function (req, res) {
   const view = $rdf.sym(utf8ToUnicode(viewIRI));
   const fetcher = createRdfFetcher(store);
 
-  fetcher.load(fetchableURI(viewIRI)).then(response => {
+  fetcher.load(fetchableURI(viewIRI)).then(() => {
     const preview = store.any(view, BROWSER("hasPreview"), undefined);
-    fetcher.load(fetchableURI(preview.value)).then(reponse => {
+    fetcher.load(fetchableURI(preview.value)).then(() => {
       const dataset = store.any(preview, BROWSER("hasDataset"), undefined);
       const query = store.any(preview, BROWSER("query"), undefined);
-      const groundedQuery = query.value.replace('WHERE {', 'WHERE { VALUES ?node {<' + resourceIRI + '>}');
-      fetcher.load(fetchableURI(dataset.value)).then(reponse => {
+      const groundedQuery = query.value.replace("WHERE {", "WHERE { VALUES ?node {<" + resourceIRI + ">}");
+      fetcher.load(fetchableURI(dataset.value)).then(() => {
         const endpoint = store.any(dataset, VOID("sparqlEndpoint"), undefined);
         const accept = store.any(dataset, BROWSER("accept"), undefined);
         let options = {
           headers: {
-            'User-Agent': 'https://github.com/martinnec/kgbrowser',
+            "User-Agent": "https://github.com/martinnec/kgbrowser",
           }
         };
         if (accept) {
-          options.headers['Accept'] = accept.value;
-          options.url = endpoint.value + '?query=' + encodeURIComponent(groundedQuery);
+          options.headers["Accept"] = accept.value;
+          options.url = endpoint.value + "?query=" + encodeURIComponent(groundedQuery);
         } else {
-          options.headers['Accept'] = "text/turtle";
-          options.url = endpoint.value + '?query=' + encodeURIComponent(groundedQuery);
+          options.headers["Accept"] = "text/turtle";
+          options.url = endpoint.value + "?query=" + encodeURIComponent(groundedQuery);
         }
         console.log("preview:\n" + options.url);
         request(options, function (error, response, body) {
@@ -480,10 +478,10 @@ app.get('/preview', function (req, res) {
             } else {
               let resultStore = $rdf.graph();
               let resource = $rdf.sym(utf8ToUnicode(resourceIRI));
-              if (options.headers['Accept'] == "application/sparql-results+json") {
+              if (options.headers["Accept"] == "application/sparql-results+json") {
                 parseSPARQLResultsJSON(body, resultStore, resourceIRI);
               } else {
-                $rdf.parse(body, resultStore, resourceIRI, options.headers['Accept']);
+                $rdf.parse(body, resultStore, resourceIRI, options.headers["Accept"]);
               }
               const label = getResourceLabel(resultStore, resource);
               let output = {
@@ -493,7 +491,7 @@ app.get('/preview', function (req, res) {
                   label: label.value
                 }],
                 types: []
-              }
+              };
               const stmtsClasses = resultStore.match(resource, BROWSER("class"));
               output.nodes[0].classes = [];
               for (let i in stmtsClasses) {
@@ -516,12 +514,12 @@ app.get('/preview', function (req, res) {
                   const fetcher = createRdfFetcher(store);
                   const typeIRI = fetchableURI(typeIRIUnicode);
                   const type = $rdf.sym(typeIRIUnicode);
-                  fetcher.load(typeIRI).then(response => {
+                  fetcher.load(typeIRI).then(() => {
                     const label = getResourceLabel(store, type);
                     const description = getResourceDescription(store, type);
                     let node = {
                       iri: unicodeToUTF8(typeIRIUnicode),
-                    }
+                    };
                     if (label) {
                       node.label = label.value;
                     }
@@ -536,8 +534,8 @@ app.get('/preview', function (req, res) {
                   });
                 }));
               }
-              Promise.all(promises).then(response => {
-                res.contentType('application/json');
+              Promise.all(promises).then(() => {
+                res.contentType("application/json");
                 res.send(JSON.stringify(output));
               }, err => {
                 console.log("Load failed " + err);
@@ -559,9 +557,9 @@ app.get('/preview', function (req, res) {
 
 });
 
-app.get('/detail', function (req, res) {
+app.get("/detail", function (req, res) {
 
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader("Access-Control-Allow-Origin", "*");
 
   const viewIRI = req.query.view;
   const resourceIRI = req.query.resource;
@@ -569,27 +567,26 @@ app.get('/detail', function (req, res) {
   let store = $rdf.graph();
   const view = $rdf.sym(utf8ToUnicode(viewIRI));
   const fetcher = createRdfFetcher(store);
-  fetcher.load(fetchableURI(viewIRI)).then(response => {
+  fetcher.load(fetchableURI(viewIRI)).then(() => {
     const detail = store.any(view, BROWSER("hasDetail"), undefined);
-    fetcher.load(fetchableURI(detail.value)).then(reponse => {
+    fetcher.load(fetchableURI(detail.value)).then(() => {
       const dataset = store.any(detail, BROWSER("hasDataset"), undefined);
       const query = store.any(detail, BROWSER("query"), undefined);
-      const groundedQuery = query.value.replace('WHERE {', 'WHERE { VALUES ?node {<' + resourceIRI + '>}');
-      //const groundedQuery = query.value.replace(/\?node/g, '<' + resourceIRI + '>');
-      fetcher.load(fetchableURI(dataset.value)).then(reponse => {
+      const groundedQuery = query.value.replace("WHERE {", "WHERE { VALUES ?node {<" + resourceIRI + ">}");
+      fetcher.load(fetchableURI(dataset.value)).then(() => {
         const endpoint = store.any(dataset, VOID("sparqlEndpoint"), undefined);
         const accept = store.any(dataset, BROWSER("accept"), undefined);
         let options = {
           headers: {
-            'User-Agent': 'https://github.com/martinnec/kgbrowser',
+            "User-Agent": "https://github.com/martinnec/kgbrowser",
           }
         };
         if (accept) {
-          options.headers['Accept'] = accept.value;
-          options.url = endpoint.value + '?query=' + encodeURIComponent(groundedQuery);
+          options.headers["Accept"] = accept.value;
+          options.url = endpoint.value + "?query=" + encodeURIComponent(groundedQuery);
         } else {
-          options.headers['Accept'] = "text/turtle";
-          options.url = endpoint.value + '?query=' + encodeURIComponent(groundedQuery);
+          options.headers["Accept"] = "text/turtle";
+          options.url = endpoint.value + "?query=" + encodeURIComponent(groundedQuery);
         }
         console.log("detail:\n" + options.url);
         request(options, function (error, response, body) {
@@ -599,10 +596,10 @@ app.get('/detail', function (req, res) {
             } else {
               let resultStore = $rdf.graph();
               let resource = $rdf.sym(utf8ToUnicode(resourceIRI));
-              if (options.headers['Accept'] == "application/sparql-results+json") {
+              if (options.headers["Accept"] == "application/sparql-results+json") {
                 parseSPARQLResultsJSON(body, resultStore, resourceIRI);
               } else {
-                $rdf.parse(body, resultStore, resourceIRI, options.headers['Accept']);
+                $rdf.parse(body, resultStore, resourceIRI, options.headers["Accept"]);
               }
               const stmts = resultStore.match(resource, null);
               let node = {
@@ -612,12 +609,12 @@ app.get('/detail', function (req, res) {
               let output = {
                 nodes: [],
                 types: []
-              }
+              };
               let typesSet = new Set();
               for (let i in stmts) {
                 const stmt = stmts[i];
                 node.data[unicodeToUTF8(stmt.predicate.uri)] = stmt.object.value;
-                if (stmt.object.termType = 'NamedNode') {
+                if (stmt.object.termType === "NamedNode") {
                   if (!typesSet.has(stmt.predicate.value)) {
                     typesSet.add(stmt.predicate.value);
                   }
@@ -632,12 +629,12 @@ app.get('/detail', function (req, res) {
                   const fetcher = createRdfFetcher(store);
                   const typeIRI = fetchableURI(typeIRIUnicode);
                   const type = $rdf.sym(typeIRIUnicode);
-                  fetcher.load(typeIRI).then(response => {
+                  fetcher.load(typeIRI).then(() => {
                     const label = getResourceLabel(store, type);
                     const description = getResourceDescription(store, type);
                     let node = {
                       iri: unicodeToUTF8(typeIRIUnicode),
-                    }
+                    };
                     if (label) {
                       node.label = label.value;
                     }
@@ -652,8 +649,8 @@ app.get('/detail', function (req, res) {
                   });
                 }));
               }
-              Promise.all(promises).then(response => {
-                res.contentType('application/json');
+              Promise.all(promises).then(() => {
+                res.contentType("application/json");
                 res.send(JSON.stringify(output));
               }, err => {
                 console.log("Load failed " + err);
@@ -675,9 +672,9 @@ app.get('/detail', function (req, res) {
 
 });
 
-app.get('/stylesheet', function (req, res) {
+app.get("/stylesheet", function (req, res) {
 
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader("Access-Control-Allow-Origin", "*");
 
   const stylesheetIRI = req.query.stylesheet;
 
@@ -685,18 +682,18 @@ app.get('/stylesheet', function (req, res) {
   const stylesheet = $rdf.sym(utf8ToUnicode(stylesheetIRI));
   const fetcher = createRdfFetcher(store);
 
-  fetcher.load(fetchableURI(stylesheetIRI)).then(response => {
+  fetcher.load(fetchableURI(stylesheetIRI)).then(() => {
     let styles = store.each(stylesheet, BROWSER("hasVisualStyle"), undefined);
     let output = {
       styles: []
-    }
+    };
     let nodeStyleOutput;
     let edgeStyleOutput;
     Promise.all(
       styles.map(
         function (style) {
           return new Promise((resolve, reject) => {
-            fetcher.load(fetchableURI(style.value)).then(response => {
+            fetcher.load(fetchableURI(style.value)).then(() => {
               let selectorLiteral = store.any(style, BROWSER("hasSelector"), undefined).value;
               let selector;
               if (selectorLiteral.startsWith("node")) {
@@ -735,7 +732,7 @@ app.get('/stylesheet', function (req, res) {
           });
         }
       )
-    ).then(response => {
+    ).then(() => {
       let finalStyles = [];
       if (nodeStyleOutput) {
         finalStyles.push(nodeStyleOutput);
@@ -745,7 +742,7 @@ app.get('/stylesheet', function (req, res) {
       }
       output.styles = finalStyles.concat(output.styles);
       output.styles.sort(compareStyles);
-      res.contentType('application/json');
+      res.contentType("application/json");
       res.send(JSON.stringify(output));
     }, err => {
       console.log("Load failed " + err);
@@ -765,8 +762,8 @@ app.get('/stylesheet', function (req, res) {
  * Parameters: iri Iri of the meta configuration
  *             languages Comma separated ISO 639-1 languages. If there is not at least one literal for one given language, random (language) is returned.
  */
-app.get('/meta-configuration', function (req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
+app.get("/meta-configuration", function (req, res) {
+  res.setHeader("Access-Control-Allow-Origin", "*");
   const metaConfigurationIRI = req.query.iri;
   const languages = req.query.languages.split(",");
 
@@ -775,7 +772,7 @@ app.get('/meta-configuration', function (req, res) {
   const fetcher = createRdfFetcher(store);
 
   // Load the resource and its neighbours
-  fetcher.load(fetchableURI(metaConfigurationIRI)).then(response => {
+  fetcher.load(fetchableURI(metaConfigurationIRI)).then(() => {
     // Data sent to client
     let result = getMetaConfigurationInfo(store, mconf, languages);
     result.has_meta_configurations = [];
@@ -785,8 +782,8 @@ app.get('/meta-configuration', function (req, res) {
 
     // Process meta configurations
     const childMConfs = store.each(mconf, BROWSER("hasMetaConficuration"));
-    promises = promises.concat(childMConfs.map(childMConf => new Promise((resolve, reject) => {
-      fetcher.load(fetchableURI(childMConf.value)).then(response => {
+    promises = promises.concat(childMConfs.map(childMConf => new Promise((resolve) => {
+      fetcher.load(fetchableURI(childMConf.value)).then(() => {
         result.has_meta_configurations.push(getMetaConfigurationInfo(store, childMConf, languages));
         resolve();
       });
@@ -794,15 +791,15 @@ app.get('/meta-configuration', function (req, res) {
 
     // Process configurations
     const childConfs = store.each(mconf, BROWSER("hasConfiguration"));
-    promises = promises.concat(childConfs.map(childConf => new Promise((resolve, reject) => {
-      fetcher.load(fetchableURI(childConf.value)).then(response => {
+    promises = promises.concat(childConfs.map(childConf => new Promise((resolve) => {
+      fetcher.load(fetchableURI(childConf.value)).then(() => {
         result.has_configurations.push(getConfigurationInfo(store, childConf, languages));
         resolve();
       });
     })));
 
-    Promise.all(promises).then(response => {
-      res.contentType('application/json');
+    Promise.all(promises).then(() => {
+      res.contentType("application/json");
       res.send(JSON.stringify(result));
     });
   });
@@ -817,8 +814,8 @@ app.get('/meta-configuration', function (req, res) {
  * Parameters: iri Iri of the configuration
  *             languages Comma separated ISO 639-1 languages. If there is not at least one literal for one given language, random (language) is returned.
  */
-app.get('/configuration', function (req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
+app.get("/configuration", function (req, res) {
+  res.setHeader("Access-Control-Allow-Origin", "*");
   const configurationIRI = req.query.iri;
   const languages = req.query.languages.split(",");
 
@@ -827,11 +824,11 @@ app.get('/configuration', function (req, res) {
   const fetcher = createRdfFetcher(store);
 
   // Load the resource and its neighbours
-  fetcher.load(fetchableURI(configurationIRI)).then(response => {
+  fetcher.load(fetchableURI(configurationIRI)).then(() => {
     // Data sent to client
     let result = getConfigurationInfo(store, conf, languages);
 
-    res.contentType('application/json');
+    res.contentType("application/json");
     res.send(JSON.stringify(result));
   });
 });
@@ -901,8 +898,8 @@ function processLiteralsByLanguage(literals, languages) {
   let foundAny = false;
   let result = {};
 
-  for (var i = 0; i < languages.length; i++) {
-    var literal = literals.find(literal => literal.language == languages[i]);
+  for (let i = 0; i < languages.length; i++) {
+    const literal = literals.find(literal => literal.language == languages[i]);
     if (literal) {
       result[languages[i]] = literal.value;
       if (literal.value !== null) foundAny = true;
@@ -929,19 +926,19 @@ function fetchableURI(source) {
   for (let i = 0; i < source.length; i++) {
     switch (state) {
       case 0:
-        if (source.charAt(i) == '\\') {
+        if (source.charAt(i) == "\\") {
           state = 1;
         } else {
           result += source.charAt(i);
         }
         break;
       case 1:
-        if (source.charAt(i) == 'u') {
+        if (source.charAt(i) == "u") {
           state = 2;
           chars = 0;
           value = "";
         } else {
-          result += '\\' + source.charAt(i);
+          result += "\\" + source.charAt(i);
           state = 0;
         }
         break;
@@ -956,6 +953,7 @@ function fetchableURI(source) {
     }
   }
 
+  /*  eslint-disable-next-line no-useless-escape */
   let pattern = new RegExp(/(http(s)?:\/\/([^\/]+)\/)(.*)/g);
   let e = result.replace(pattern, "$4");
   let b = result.replace(pattern, "$1");
@@ -972,19 +970,19 @@ function unicodeToUTF8(source) {
   for (let i = 0; i < source.length; i++) {
     switch (state) {
       case 0:
-        if (source.charAt(i) == '\\') {
+        if (source.charAt(i) == "\\") {
           state = 1;
         } else {
           result += source.charAt(i);
         }
         break;
       case 1:
-        if (source.charAt(i) == 'u') {
+        if (source.charAt(i) == "u") {
           state = 2;
           chars = 0;
           value = "";
         } else {
-          result += '\\' + source.charAt(i);
+          result += "\\" + source.charAt(i);
           state = 0;
         }
         break;
@@ -1003,14 +1001,11 @@ function unicodeToUTF8(source) {
 }
 
 function utf8ToUnicode(source) {
-  let state = 0;
-  let chars = 0;
-  let value = "";
   let result = "";
 
   for (let i = 0; i < source.length; i++) {
     let character = source.charAt(i);
-    if (character > '~') {
+    if (character > "~") {
       let newCharacter = source.charCodeAt(i).toString(16).toUpperCase();
       if (newCharacter.length == 2) {
         result += "\\u00" + source.charCodeAt(i).toString(16).toUpperCase();
@@ -1057,7 +1052,6 @@ function getResourceDescription(store, resource) {
 
 function parseSPARQLResultsJSON(body, store, source) {
   let subject, predicate, object;
-  let bnodes = {};
   let why = $rdf.sym(source);
   let parsedBody = JSON.parse(body);
 
@@ -1069,7 +1063,7 @@ function parseSPARQLResultsJSON(body, store, source) {
         predicate = $rdf.sym(data[i].predicate.value);
         if (data[i].object.type == "uri") {
           object = $rdf.sym(data[i].object.value);
-          store.add(subject, predicate, object, why)
+          store.add(subject, predicate, object, why);
         } else {
           if (data[i].object.type == "literal") {
             if (data[i].object["xml:lang"]) {
