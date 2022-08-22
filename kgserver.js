@@ -760,6 +760,85 @@ app.get('/stylesheet', function (req, res) {
 
 });
 
+app.get('/layout-constraints', function (req, res)  {
+
+  res.setHeader('Access-Control-Allow-Origin', '*');
+
+  const constraintIRI = req.query.constraint ;
+
+  let store = $rdf.graph();
+  const constraint = $rdf.sym(utf8ToUnicode(constraintIRI));
+  const fetcher = createRdfFetcher(store);
+
+  fetcher.load(fetchableURI(constraintIRI)).then(response => {
+    let constraints = store.each(constraint, BROWSER("hasConstraint"), undefined);
+    let output = {
+      constraints: []
+    }
+    let classesToApplyConstraint = [];
+    let parentChildConstraint = {
+      childSelector: "",
+      edgeSelector: ""
+    }
+    Promise.all(
+      constraints.map(
+        function (constraint)  {
+          return new Promise((resolve, reject) => {
+            fetcher.load(fetchableURI(constraint.value)).then(response => {
+              let constraintType = unicodeToUTF8(constraint.value).match(/layout-constraints\/(.*)/)[1];
+              let constraintID = constraintType.match(/\/(.*)/)[1]
+              constraintType = constraintType.match(/(.*)\//)[1]
+              let constraintOutput = {
+                type: constraintType,
+                id: constraintID,
+                properties: {}
+              };
+              const stmts = store.match(constraint, null);
+              for(let i in stmts) {
+                const stmt = stmts[i];
+                const constraintProperty = unicodeToUTF8(stmt.predicate.uri);
+                if (constraintProperty.startsWith("https://linked.opendata.cz/ontology/knowledge-graph-browser/") && !constraintProperty.endsWith("hasConstraint")) {
+                  if (constraintProperty.endsWith("childNodeSelector")) {
+                    parentChildConstraint.childSelector = stmt.object.value;
+                  } else if (constraintProperty.endsWith("hierarchyEdgeSelector")) {
+                    parentChildConstraint.edgeSelector = stmt.object.value;
+                  } else {
+                    classesToApplyConstraint.push(stmt.object.value);
+                  }
+                }
+              }
+              if (parentChildConstraint.childSelector != "") {
+                constraintOutput.properties = parentChildConstraint;
+              }
+              else if (classesToApplyConstraint.length > 0) {
+                constraintOutput.properties["classesToApplyConstraint"] = classesToApplyConstraint;
+              }
+              output.constraints.push(constraintOutput);
+              classesToApplyConstraint = [];
+              parentChildConstraint = {
+                childSelector: "",
+                edgeSelector: ""
+              };
+              resolve(constraint);
+            }, err => {
+              console.log("Load failed " +  err);
+              reject(constraint);
+            });
+          });
+        }
+      )
+    ).then(response => {
+      res.contentType('application/json');
+      res.send(JSON.stringify(output));
+    }, err => {
+      console.log("Load failed " +  err);
+    });
+  }, err => {
+    console.log("Load failed " +  err);
+  });
+
+});
+
 /**
  * Handles requests to get a meta configuration.
  * Meta configuration is like a directory for other meta configurations and configurations.
@@ -865,6 +944,7 @@ function getConfigurationInfo(store, configuration, languages) {
     iri: unicodeToUTF8(configuration.value),
     // Stylesheet IRI
     stylesheet: [],
+    constraints: [],
     title: {},
     description: {},
     // List of .json files
@@ -876,6 +956,9 @@ function getConfigurationInfo(store, configuration, languages) {
 
   const stylesheet = store.any(configuration, BROWSER("hasVisualStyleSheet"));
   if (stylesheet) result.stylesheet = [unicodeToUTF8(stylesheet.value)];
+
+  const constraints = store.any(configuration, BROWSER("hasLayoutContraints"));
+  if (constraints) result.constraints = [unicodeToUTF8(constraints.value)];
 
   const titleLiterals = store.each(configuration, DCT("title"));
   result.title = processLiteralsByLanguage(titleLiterals, languages);
