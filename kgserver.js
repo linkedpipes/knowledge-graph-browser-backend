@@ -957,7 +957,7 @@ function getConfigurationInfo(store, configuration, languages) {
   const stylesheet = store.any(configuration, BROWSER("hasVisualStyleSheet"));
   if (stylesheet) result.stylesheet = [unicodeToUTF8(stylesheet.value)];
 
-  const constraints = store.any(configuration, BROWSER("hasLayoutContraints"));
+  const constraints = store.any(configuration, BROWSER("hasLayoutConstraintSet"));
   if (constraints) result.constraints = [unicodeToUTF8(constraints.value)];
 
   const titleLiterals = store.each(configuration, DCT("title"));
