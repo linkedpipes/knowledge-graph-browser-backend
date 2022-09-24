@@ -760,6 +760,7 @@ app.get('/stylesheet', function (req, res) {
 
 });
 
+// Returns layout constraints to apply
 app.get('/layout-constraints', function (req, res)  {
 
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -776,7 +777,7 @@ app.get('/layout-constraints', function (req, res)  {
       constraints: []
     }
     let classesToApplyConstraint = [];
-    let parentChildConstraint = {
+    let childParentConstraint = {
       childSelector: "",
       edgeSelector: ""
     }
@@ -799,23 +800,23 @@ app.get('/layout-constraints', function (req, res)  {
                 const constraintProperty = unicodeToUTF8(stmt.predicate.uri);
                 if (constraintProperty.startsWith("https://linked.opendata.cz/ontology/knowledge-graph-browser/") && !constraintProperty.endsWith("hasConstraint")) {
                   if (constraintProperty.endsWith("childNodeSelector")) {
-                    parentChildConstraint.childSelector = stmt.object.value;
-                  } else if (constraintProperty.endsWith("hierarchyEdgeSelector")) {
-                    parentChildConstraint.edgeSelector = stmt.object.value;
+                    childParentConstraint.childSelector = stmt.object.value;
+                  } else if (constraintProperty.endsWith("hierarchicalEdgeSelector")) {
+                    childParentConstraint.edgeSelector = stmt.object.value;
                   } else {
                     classesToApplyConstraint.push(stmt.object.value);
                   }
                 }
               }
-              if (parentChildConstraint.childSelector != "") {
-                constraintOutput.properties = parentChildConstraint;
+              if (childParentConstraint.childSelector != "") {
+                constraintOutput.properties = childParentConstraint;
               }
               else if (classesToApplyConstraint.length > 0) {
                 constraintOutput.properties["classesToApplyConstraint"] = classesToApplyConstraint;
               }
               output.constraints.push(constraintOutput);
               classesToApplyConstraint = [];
-              parentChildConstraint = {
+              childParentConstraint = {
                 childSelector: "",
                 edgeSelector: ""
               };
