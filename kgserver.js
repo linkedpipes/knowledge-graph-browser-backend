@@ -21,7 +21,7 @@ app.get('/', function (req, res) {
 
 })
 
-// Gets values for facets - prepares and sends a SPARQL query to a SPARQL 
+// Gets values for facets - prepares and sends a SPARQL query to a SPARQL
 // endpoint and parses its response
 app.get('/facets-items', function (req, res) {
   const configIRI = req.query.configIRI;
@@ -240,9 +240,11 @@ app.get('/view-sets', function (req, res) {
               new Promise((resolve, reject) => {
                 fetcher.load(fetchableURI(view.value)).then(response => {
                   const label = store.any(view, DCT("title"), undefined);
+                  const viewDescription = store.any(view, DCT("description"), undefined);
                   resolve({
                     iri: unicodeToUTF8(view.value),
-                    label: label.value
+                    label: label.value,
+                    viewDescription: (viewDescription) ? viewDescription.value : ""
                   });
                 }, err => {
                   console.log("Load failed " + err);
@@ -777,8 +779,8 @@ app.get('/layout-constraints', function (req, res)  {
       constraints: []
     }
     let classesToApplyConstraint = [];
-    let childParentConstraint = {
-      childSelector: "",
+    let hierarchicalGroupConstraint = {
+      nodeSelector: "",
       edgeSelector: ""
     }
     Promise.all(
@@ -786,9 +788,10 @@ app.get('/layout-constraints', function (req, res)  {
         function (constraint)  {
           return new Promise((resolve, reject) => {
             fetcher.load(fetchableURI(constraint.value)).then(response => {
-              let constraintType = unicodeToUTF8(constraint.value).match(/layout-constraints\/(.*)/)[1];
-              let constraintID = constraintType.match(/\/(.*)/)[1]
-              constraintType = constraintType.match(/(.*)\//)[1]
+              let constraintType = unicodeToUTF8(constraint.value).match(/\/layout-constraints\/([^\/]+)/)[1];
+              console.log("constraint type: " + constraintType)
+              let constraintID = unicodeToUTF8(constraint.value).match(/([^/]*$)/)[0];
+              console.log("constraint id: " + constraintID)
               let constraintOutput = {
                 type: constraintType,
                 id: constraintID,
@@ -799,25 +802,25 @@ app.get('/layout-constraints', function (req, res)  {
                 const stmt = stmts[i];
                 const constraintProperty = unicodeToUTF8(stmt.predicate.uri);
                 if (constraintProperty.startsWith("https://linked.opendata.cz/ontology/knowledge-graph-browser/") && !constraintProperty.endsWith("hasConstraint")) {
-                  if (constraintProperty.endsWith("childNodeSelector")) {
-                    childParentConstraint.childSelector = stmt.object.value;
+                  if (constraintProperty.endsWith("nodeSelector")) {
+                    hierarchicalGroupConstraint.nodeSelector = stmt.object.value;
                   } else if (constraintProperty.endsWith("hierarchicalEdgeSelector")) {
-                    childParentConstraint.edgeSelector = stmt.object.value;
+                    hierarchicalGroupConstraint.edgeSelector = stmt.object.value;
                   } else {
                     classesToApplyConstraint.push(stmt.object.value);
                   }
                 }
               }
-              if (childParentConstraint.childSelector != "") {
-                constraintOutput.properties = childParentConstraint;
+              if (hierarchicalGroupConstraint.nodeSelector != "") {
+                constraintOutput.properties = hierarchicalGroupConstraint;
               }
               else if (classesToApplyConstraint.length > 0) {
                 constraintOutput.properties["classesToApplyConstraint"] = classesToApplyConstraint;
               }
               output.constraints.push(constraintOutput);
               classesToApplyConstraint = [];
-              childParentConstraint = {
-                childSelector: "",
+              hierarchicalGroupConstraint = {
+                nodeSelector: "",
                 edgeSelector: ""
               };
               resolve(constraint);
