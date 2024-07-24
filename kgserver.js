@@ -279,7 +279,24 @@ app.get('/view-sets', function (req, res) {
 
 function createRdfFetcher(store) {
   const fetcher = new $rdf.Fetcher(store);
-  fetcher.mediatypes["application/xhtml+xml"] = { "q": 0.9 };
+
+  // Workaround bug with passing headers to fetcher
+  // https://github.com/linkeddata/rdflib.js/issues/426
+  const oldLoad = fetcher.load;
+  fetcher.load = function (uri, options) {
+    options = options || {};
+    options.headers = options.headers || {};
+    return oldLoad.call(fetcher, uri, options);
+  }
+
+  fetcher.mediatypes = {
+    'text/turtle': {q: 1},
+    'text/n3': {q: 1},
+    'application/rdf+xml': {q: 1},
+    'application/ld+json': {q: 1},
+    'application/xhtml+xml': {q: 0.9},
+  };
+
   return fetcher;
 }
 
